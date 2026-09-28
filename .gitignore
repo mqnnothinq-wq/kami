@@ -7,12 +7,12 @@ backup.env
 *.pass
 
 # Çalışma zamanı verileri (sunucu dizinleri, dünyalar, jar'lar)
-servers/
-world*/
+/servers/
+/world*/
 *.jar
 *.jar.new
 *.jar.old
-logs/
+/logs/
 
 # Araç çıktıları
 __pycache__/
