@@ -22,8 +22,9 @@ UNIT_DIR="/etc/systemd/system"
 SWAPFILE="/swapfile"
 # git: build-librelogin.sh (LibreLogin kaynaktan derlenir). backup.sh'in LibreLogin SQLite kopyası
 # python3'ün standart sqlite3 modülüyle alınır (ayrı sqlite3 paketi gerekmez); mariadb-dump,
-# mariadb-server'ın bağımlılığı mariadb-client'tan gelir; flock/setpriv/runuser util-linux'tadır.
-APT_PACKAGES=(curl ca-certificates gnupg git jq ufw fail2ban python3 python3-systemd restic zstd
+# mariadb-server'ın bağımlılığı mariadb-client'tan gelir; flock/setpriv/runuser/setsid/findmnt
+# util-linux'tadır; pgrep (build-librelogin: derleme kullanıcısının süreçleri) procps'tadır.
+APT_PACKAGES=(curl ca-certificates gnupg git jq procps ufw fail2ban python3 python3-systemd restic zstd
     mariadb-server sysstat unattended-upgrades)
 
 DRY_RUN=0
@@ -334,6 +335,8 @@ setup_user_dirs() {
         run useradd --system --gid "$MC_USER" --home-dir "$MC_ROOT" --no-create-home \
             --shell /usr/sbin/nologin --comment "Minecraft sunuculari" "$MC_USER"
     fi
+    # LibreLogin'i derleyen ayrı, grupsuz sistem kullanıcısı (build-librelogin.sh; lib.sh).
+    ensure_build_user run
     run install -d -m 0755 -o root -g root "$MC_ROOT"
     run install -d -m 0750 -o "$MC_USER" -g "$MC_USER" "$SERVERS_DIR"
     # Yerelde derlenen eklentiler (plugins.list "local" kaynağı, ör. LibreLogin): yalnız root yazar.

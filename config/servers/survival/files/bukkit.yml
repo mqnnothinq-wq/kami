@@ -5,7 +5,7 @@ settings:
 # Oyuncu başına doğal mob sınırları, ölçülü düşürüldü (oynanışı değiştirir: dünyada biraz
 # daha az mob; çiftlik verimi hafif düşer). Varsayılanlar parantez içinde.
 # Daha fazla CPU gerekirse ticks-per.monster-spawns vb. 2 yapılarak doğma denemeleri
-# yarıya indirilebilir (şu an vanilla: her tick).
+# yarıya indirilebilir (şu an vanilla: her tick; animal-spawns hariç, onun varsayılanı 400).
 spawn-limits:
   # canavar (70)
   monsters: 50

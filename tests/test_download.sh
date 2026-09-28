@@ -430,6 +430,7 @@ if [[ $(id -u) -eq 0 ]] && NB_UID=$(id -u nobody 2>/dev/null); then
     chown -R -h "$NB_UID:$NB_GID" "$S2"
     printf 'velocity LuckPerms luckperms velocity\nlobby LuckPerms luckperms bukkit\n' >"$T/sym.list"
     (
+        # shellcheck disable=SC2034  # PLUGINS_LIST'i lib.sh'teki plugins_list_file okur
         MC_ROOT=$R2 SERVERS_DIR=$S2 MC_USER=nobody PLUGINS_LIST="$T/sym.list"
         main all
     ) >"$T/out" 2>&1

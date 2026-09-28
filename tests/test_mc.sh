@@ -738,5 +738,22 @@ check "doctor kritik varsa çıkış 1" eq "$RC" 1
 FAKE_JAVA_VERSION="21.0.4" MC_JAVA_BIN="$T/bin/java" mc doctor
 check "doctor Java 21 → KRİTİK" out_has "en az 25 gerekli"
 
+echo "# doctor: LibreLogin commit ↔ plugins.list ↔ artifacts/"
+check "LibreLogin satırı yokken denetim sessiz" out_lacks "LibreLogin:"
+# shellcheck disable=SC2016  # plugins.list'te '$MC_ROOT' birebir yazılır
+printf 'velocity LibreLogin local $MC_ROOT/artifacts/LibreLogin-39397c4.jar\n' >>"$REPO/config/plugins.list"
+printf 'LIBRELOGIN_COMMIT="39397c47585e193d71cc84d3043f4a61df725124"\n' >>"$REPO/config/network.env"
+MC_JAVA_BIN="$T/bin/java" mc doctor
+check "doctor: derlenmemiş LibreLogin → UYARI + build-librelogin" \
+    out_has "[UYARI] LibreLogin: $T/root/artifacts/LibreLogin-39397c4.jar yok — sudo mc build-librelogin"
+mkdir -p "$T/root/artifacts" && : >"$T/root/artifacts/LibreLogin-39397c4.jar"
+MC_JAVA_BIN="$T/bin/java" mc doctor
+check "doctor: derlenmiş LibreLogin → TAMAM" out_has "[TAMAM] LibreLogin: LibreLogin-39397c4.jar derlenmiş."
+printf 'LIBRELOGIN_COMMIT="abcdef0123456789abcdef0123456789abcdef01"\n' >>"$REPO/config/network.env"
+MC_JAVA_BIN="$T/bin/java" mc doctor
+check "doctor: commit ≠ plugins.list → KRİTİK" \
+    out_has "[KRİTİK] LibreLogin: plugins.list LibreLogin-39397c4.jar gösteriyor ama network.env LIBRELOGIN_COMMIT LibreLogin-abcdef0.jar gerektiriyor"
+check "doctor: uyuşmazlıkta çıkış 1" eq "$RC" 1
+
 printf '\ntest_mc: %d geçti, %d başarısız\n' "$PASS" "$FAIL"
 ((FAIL == 0))

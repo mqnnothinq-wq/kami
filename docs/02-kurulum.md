@@ -162,13 +162,14 @@ sudo bash /opt/minecraft/kami/scripts/install.sh
 **Ne yapar?** (Tekrar çalıştırmak güvenlidir; var olan gizli değerlere ve yedek parolasına asla
 dokunmaz.)
 
-- Paketler: curl, git, jq, ufw, fail2ban, python3, restic, zstd, mariadb-server, sysstat,
+- Paketler: curl, git, jq, procps, ufw, fail2ban, python3, restic, zstd, mariadb-server, sysstat,
   unattended-upgrades
 - Java 25 ve `/usr/bin/java`'nın Java 25'i göstermesi (`update-alternatives`); sürümün ön sürüm
   (`-` içeren) olmadığı denetlenir
 - mikefarah `yq` v4.53.6 (SHA-256 doğrulamalı) → `/usr/local/bin/yq`
-- `minecraft` sistem kullanıcısı; `/opt/minecraft/servers` (sunucular) ve `/opt/minecraft/artifacts`
-  (yerelde derlenen jar'lar)
+- `minecraft` sistem kullanıcısı; LibreLogin derlemesi için ayrı, grupsuz ve oturum açamayan
+  `kami-build` sistem kullanıcısı; `/opt/minecraft/servers` (sunucular) ve
+  `/opt/minecraft/artifacts` (yerelde derlenen jar'lar)
 - Saat dilimi `Europe/Istanbul`, NTP
 - Çekirdek ağ ayarları, journald sınırları, THP `madvise`, otomatik güncelleme ve needrestart
   ayarları (`host/` dizini)
@@ -225,15 +226,19 @@ sudo mc build-librelogin
 
 Ne yapar:
 
-1. `https://github.com/kyngs/LibreLogin` (dal `dev`) deposunu `/var/tmp` altında root'a ait geçici
-   bir dizinin içine klonlar ve `LIBRELOGIN_COMMIT` commit'ine geçer.
+1. `config/plugins.list`'teki LibreLogin satırının bu commit'in jar'ını gösterdiğini denetler,
+   sonra `https://github.com/kyngs/LibreLogin` (dal `dev`) deposunu `/var/tmp` altında root'a ait
+   geçici bir dizinin içine klonlar ve `LIBRELOGIN_COMMIT` commit'ine geçer.
 2. JDK 25 gerekir: sistemde zaten bir JDK 25 `javac` yoksa `temurin-25-jdk`'yı install.sh'in
    eklediği Adoptium deposundan geçici olarak kurar, iş bitince (derleme başarısız olsa da)
    kaldırır (`--keep-jdk` ile bırakılır; zaten kuruluysa dokunulmaz). Kurma/kaldırma
    `/usr/bin/java` seçimini (sunucuların kullandığı Java) değiştirirse betik eskisini geri koyar.
-3. Klonlamayı ve `./gradlew --no-daemon build` komutunu **yetkisiz `nobody` kullanıcısıyla**
-   (geçici bir HOME ile; asla root olarak değil) çalıştırır, çünkü derleme indirilen kodu çalıştırır.
-   Geçici dizin sonunda silinir.
+3. Klonlamayı ve `./gradlew --no-daemon build` komutunu **ayrı, yetkisiz `kami-build` sistem
+   kullanıcısıyla** (install.sh oluşturur, yoksa betik oluşturur; ek grubu, evi ve kabuğu yoktur;
+   geçici bir HOME ile) çalıştırır; asla root ya da `minecraft` olarak değil, çünkü derleme
+   indirilen kodu çalıştırır. Komutlar denetim uçbirimi olmadan çalışır ve çıktılarındaki denetim
+   karakterleri silinir. Gradle bitince `kami-build`'in **tüm** süreçleri durdurulur; jar ancak
+   ondan sonra okunur. Geçici dizin sonunda silinir.
 4. Çıktıyı `/opt/minecraft/artifacts/LibreLogin-39397c4.jar` (commit'in ilk 7 hanesi) ve yanına
    `LibreLogin-39397c4.jar.sha256` olarak koyar, SHA-256 özetini ve sonraki adımı yazar.
 
@@ -244,10 +249,16 @@ bırak), `--dry-run` ya da `-n` (hiçbir şey kurmadan/indirmeden yalnız ne yap
 - Derleme internet ister (GitHub, Maven Central, repo.papermc.io, repo.kyngs.xyz,
   services.gradle.org), birkaç yüz MB geçici alan kullanır ve birkaç dakika sürer.
   Ağ ya da derleme hatasında Türkçe bir hata mesajıyla durur; tekrar deneyebilirsiniz.
-- `--commit` ile başka bir commit derlerseniz **üç şey birlikte değişmelidir**: `network.env`
-  içindeki `LIBRELOGIN_COMMIT`, `config/plugins.list` içindeki
-  `$MC_ROOT/artifacts/LibreLogin-<ilk7>.jar` satırı ve derlenen dosyanın adı. Sonra giriş duman
-  testini yeniden yapın.
+- `network.env`'deki `LIBRELOGIN_COMMIT` ile `config/plugins.list`'teki
+  `$MC_ROOT/artifacts/LibreLogin-<ilk7>.jar` satırı **aynı commit'i** göstermelidir; göstermiyorsa
+  betik derlemeye başlamadan hata verir (yoksa `mc download` eski jar'ı kurardı). `--commit` ile
+  başka bir commit derlerseniz yalnız uyarır ve "`mc download` bu jar'ı kurmaz" der: o commit'i
+  kullanacaksanız iki satırı birlikte güncelleyin, sonra giriş duman testini yeniden yapın.
+- `kami-build` kullanıcısını başka işe kullanmayın: derleme başlarken bu kullanıcının çalışan bir
+  süreci varsa betik reddeder (artık süreçleri `sudo pkill -KILL -U kami-build` ile durdurun).
+- `/var/tmp` noexec bağlıysa (bazı sıkılaştırma rehberleri böyle yapar) `gradlew` çalıştırılamaz ve
+  betik bunu söyleyerek durur. Çalıştırılabilir bir dizin verin:
+  `sudo install -d -m 0755 /opt/kami-tmp && sudo env TMPDIR=/opt/kami-tmp mc build-librelogin`.
 - Aynı commit'i yeniden derlerseniz dosyanın üzerine yazılır; derleme bire bir tekrarlanabilir
   olmadığından özet değişebilir (betik bunu uyarı olarak yazar). Aynı anda yalnız bir derleme
   çalışabilir.
@@ -501,6 +512,8 @@ alındı"`; git kimliği 4. adımda tanımlandı) ve sunucuyu duyurun.
 | "Giriş sunucusu şu an kapalı" (kick-no-limbo) | limbo çalışmıyor | `sudo mc start limbo`; `sudo mc log limbo` |
 | Cracked oyuncu "Bu isim kullanımda" ya da premium adla atılıyor | Ad Mojang'da kayıtlı (premium) ya da başka biri kaydetmiş | Oyuncu başka bir ad seçmeli; ayrıntı [docs/08](08-giris-sistemi.md) |
 | `mc download` LibreLogin için "dosya yok" | 8. adım yapılmadı ya da commit/ad uyuşmuyor | `sudo mc build-librelogin`; `plugins.list` satırı ile `LIBRELOGIN_COMMIT`'in ilk 7 hanesi aynı olmalı |
+| `mc build-librelogin`: "Uyuşmazlık: network.env LIBRELOGIN_COMMIT …" | `plugins.list`'teki LibreLogin satırı başka bir commit'in jar'ını gösteriyor | İki satırı aynı commit'e getirin (`$MC_ROOT/artifacts/LibreLogin-<ilk7>.jar`), tekrar çalıştırın |
+| `mc build-librelogin`: "noexec bağlı" ya da `gradlew` çıkış 126/127 | Geçici dizin (`/var/tmp`) noexec | `sudo install -d -m 0755 /opt/kami-tmp && sudo env TMPDIR=/opt/kami-tmp mc build-librelogin` |
 | `mc apply` "eklenti henüz config üretmedi" uyarısı | Eklenti ilk açılışta dosyasını oluşturmadan önce uygulandı | Sunucuyu bir kez başlatıp durdurun, `sudo mc apply <sunucu>` tekrarlayın (`mc init` bunu kendisi yapar) |
 | Değişiklik etkisiz | Ayar uygulanmadı ya da sunucu yeniden başlamadı | `sudo mc apply <sunucu>` → `sudo mc restart <sunucu>` |
 | `mc doctor`: "RAM yetersiz olabilir" | Heap toplamı makineye göre fazla | Önerilen kadar `HEAP` düşürün ya da paketi büyütün ([docs/07](07-olcekleme.md)) |

@@ -3,9 +3,12 @@
 #  1) argümanlar ve commit doğrulaması (7-40 onaltılık hane)
 #  2) jar adı: config/network.env LIBRELOGIN_COMMIT ↔ config/plugins.list LibreLogin satırı (birlikte değişir)
 #  3) --dry-run: hiçbir şey kurulmaz/yazılmaz; plan yazdırılır
-#  4) Gradle asla root olarak çalıştırılmaz
+#  4) Gradle asla root olarak çalıştırılmaz; derleme kullanıcısı denetimleri (root, MC_USER, süreçleri)
 #  5) Uçtan uca (root + nobody): gerçek LibreLogin deposu yerine yerel git deposu (sahte gradlew),
 #     JDK 25 ve apt/dpkg-query/update-alternatives PATH'e konan sahte komutlarla taklit edilir.
+#     Uçbirim güvenliği (TIOCSTI, kaçış dizileri), geride kalan süreçler, noexec, temizlik.
+# Uçtan uca bölüm LIBRELOGIN_BUILD_USER=nobody kullanır: varsayılan 'kami-build' kullanıcısı test
+# makinesinde OLUŞTURULMASIN diye (kuru çalıştırma testleri varsayılanı denetler).
 # Çalıştırma: bash tests/test_build_librelogin.sh
 set -Eeuo pipefail
 
@@ -38,6 +41,7 @@ eq() {
 }
 out_has() { grep -qF -- "$1" <<<"$OUT"; }
 out_lacks() { ! grep -qF -- "$1" <<<"$OUT"; }
+no_esc() { [[ $OUT != *$'\e'* ]]; }
 empty_dir() { [[ -z $(find "$1" -mindepth 1 -print -quit 2>/dev/null) ]]; }
 
 # --- Sandbox -------------------------------------------------------------------
@@ -152,8 +156,13 @@ check "tutarlı config'de uyumsuzluk uyarısı yok" out_lacks "BİRLİKTE günce
 # -----------------------------------------------------------------------------
 echo "# --dry-run"
 check "commit network.env'den" out_has "(config/network.env LIBRELOGIN_COMMIT)"
-check "plan: klon (dev dalı, nobody)" out_has "git clone --branch dev --single-branch https://github.com/kyngs/LibreLogin"
-check "plan: gradlew --no-daemon build (nobody)" out_has "./gradlew --no-daemon build   (kullanıcı: nobody"
+check "plan: klon (dev dalı)" out_has "git clone --branch dev --single-branch https://github.com/kyngs/LibreLogin"
+check "plan: varsayılan derleme kullanıcısı kami-build (nobody değil)" out_has "./gradlew --no-daemon build   (kullanıcı: kami-build"
+check "plan: derlemeden sonra kullanıcının süreçleri durdurulur" out_has "kami-build kullanıcısının tüm süreçleri durdurulur"
+if ! id -u kami-build >/dev/null 2>&1; then
+    check "plan: kami-build yoksa oluşturulur (kuru: yalnız yazdırılır)" out_has "[kuru] derleme kullanıcısı oluşturulur: kami-build"
+    check "kuru çalıştırma kami-build'i oluşturmadı" bash -c '! id -u kami-build >/dev/null 2>&1'
+fi
 check "plan: mevcut JDK 25 kullanılır" out_has "JDK 25 mevcut: $T/jvm/jdk-25"
 check "plan: sonraki adım" out_has "sonraki adım: sudo mc download plugins velocity"
 check "plan: .sha256" out_has "LibreLogin-$C7_CFG.jar.sha256"
@@ -161,7 +170,23 @@ check "kuru çalıştırma artifacts/ oluşturmadı" test ! -e "$T/root/artifact
 check "kuru çalıştırma geçici dizin bırakmadı" empty_dir "$T/tmp"
 check "kuru çalıştırma apt çağırmadı" eq "$(apt_calls)" ""
 bl --dry-run --commit 1234567
+check "--commit ile farklı commit: yalnız uyarı (çıkış 0)" eq "$RC" 0
 check "farklı commit: plugins.list uyumsuzluk uyarısı" out_has "LibreLogin-1234567.jar üretir"
+check "farklı commit: sonraki adım plugins.list'i güncellemeyi söyler" out_has "BİRLİKTE 1234567 yapın"
+# network.env ↔ plugins.list uyuşmazlığı (commit network.env'den): HATA, hiçbir şey yapılmaz
+cp "$REPO/config/network.env" "$T/network.env.bak"
+sed -i 's/^LIBRELOGIN_COMMIT=.*/LIBRELOGIN_COMMIT="abcdef0123456789abcdef0123456789abcdef01"/' "$REPO/config/network.env"
+bl --dry-run
+check "network.env ≠ plugins.list (kuru): reddedilir" test "$RC" -ne 0
+check "uyuşmazlık mesajı iki dosyayı da gösterir" out_has "Uyuşmazlık: network.env LIBRELOGIN_COMMIT"
+check "uyuşmazlık mesajı beklenen plugins.list yolunu verir" out_has "\$MC_ROOT/artifacts/LibreLogin-abcdef0.jar"
+if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    LIBRELOGIN_BUILD_USER=nobody LIBRELOGIN_REPO="$T/olmayan" bl
+    check "network.env ≠ plugins.list (gerçek): reddedilir" test "$RC" -ne 0
+    check "uyuşmazlıkta klon/geçici dizin yok" empty_dir "$T/tmp"
+    check "uyuşmazlıkta apt çağrılmadı" eq "$(apt_calls)" ""
+fi
+cp "$T/network.env.bak" "$REPO/config/network.env"
 mkdir -p "$T/jvm-yok"
 mkjdk "$T/jvm-yok/jdk-21" 21.0.4
 mkjdk "$T/jvm-yok/jdk-25-ea" 25-ea
@@ -184,7 +209,19 @@ check "LIBRELOGIN_BUILD_USER=root (gerçek) reddedilir" test "$RC" -ne 0
 check "reddedilince klon/geçici dizin yok" empty_dir "$T/tmp"
 check "reddedilince apt çağrılmadı" eq "$(apt_calls)" ""
 LIBRELOGIN_BUILD_USER=olmayan-kullanici-xyz bl --dry-run
-check "olmayan derleme kullanıcısı reddedilir" out_has "Derleme kullanıcısı yok"
+check "olmayan (varsayılan olmayan) derleme kullanıcısı reddedilir" out_has "Derleme kullanıcısı yok"
+if id nobody >/dev/null 2>&1; then
+    LIBRELOGIN_BUILD_USER=nobody MC_USER=nobody bl --dry-run
+    check "derleme kullanıcısı = MC_USER reddedilir" out_has "sunucu kullanıcısı (nobody) olamaz"
+fi
+# Ek gruplu bir kullanıcı (varsa) reddedilir.
+SUPU=$(getent passwd | awk -F: '$3 != 0 { print $1 }' | while read -r u; do
+    if [[ $(id -G -- "$u" 2>/dev/null) == *' '* ]]; then printf '%s\n' "$u"; break; fi
+done)
+if [[ -n $SUPU ]]; then
+    LIBRELOGIN_BUILD_USER=$SUPU MC_USER=olmayan-mc bl --dry-run
+    check "ek gruplu derleme kullanıcısı ($SUPU) reddedilir" out_has "ek grupları var"
+fi
 if [[ ${EUID:-$(id -u)} -eq 0 ]] && id nobody >/dev/null 2>&1 && command -v setpriv >/dev/null 2>&1; then
     RC=0
     OUT=$(setpriv --reuid=nobody --regid="$(id -g nobody)" --clear-groups -- \
@@ -217,6 +254,27 @@ else
             bag) printf 'mkdir -p Plugin/build/libs\nln -s /etc/shadow Plugin/build/libs/LibreLogin.jar\n' ;;
             dizinbag) printf 'ln -s %s Plugin/build/libs\n' "$T/gizli" ;;
             jaryok) printf 'mkdir -p Plugin/build/libs\n' ;;
+            tty) # uçbirim enjeksiyonu denemesi + kaçış dizisi
+                printf '%s\n' 'python3 - <<"PY"' \
+                    'import fcntl, termios, os' \
+                    'r = ["tty0=%d" % os.isatty(0)]' \
+                    'for fd in (0, 1, 2):' \
+                    '    try:' \
+                    '        fcntl.ioctl(fd, termios.TIOCSTI, b"#"); r.append("fd%d:ENJEKTE" % fd)' \
+                    '    except OSError as e:' \
+                    '        r.append("fd%d:%d" % (fd, e.errno))' \
+                    'try:' \
+                    '    os.open("/dev/tty", os.O_RDWR); r.append("devtty:ACIK")' \
+                    'except OSError as e:' \
+                    '    r.append("devtty:%d" % e.errno)' \
+                    'print("TIOCSTI-DENEME", " ".join(r), flush=True)' \
+                    'PY'
+                printf 'printf "\\033]0;kami-baslik\\007KACIS-SONU\\n"\n'
+                printf 'mkdir -p Plugin/build/libs\nprintf "PK\\003\\004tty" >Plugin/build/libs/LibreLogin.jar\n' ;;
+            artik) # derlemenin geride bıraktığı süreçler: jar'ı değiştirmeye ve $HOME'a yazmaya devam eder
+                printf 'mkdir -p Plugin/build/libs\nprintf "PK\\003\\004GERCEK" >Plugin/build/libs/LibreLogin.jar\n'
+                printf '( sleep 1; while :; do printf "PK\\003\\004DEGISTIRILDI" >Plugin/build/libs/LibreLogin.jar; mkdir -p "$HOME/.kotlin/d"; touch "$HOME/.kotlin/d/$$"; done ) </dev/null >/dev/null 2>&1 &\n'
+                printf 'setsid sleep 300 </dev/null >/dev/null 2>&1 &\n' ;;
         esac
     }
     commit_as() { # <tür> <sürüm> — commit kimliğini yazar
@@ -234,8 +292,18 @@ else
     C_DBAG=$(commit_as dizinbag v5)
     C_YOK=$(commit_as jaryok v6)
     C_SON=$(commit_as iyi v7)
+    C_TTY=$(commit_as tty v8)
+    C_ARTIK=$(commit_as artik v9)
+    C_NOX=$(commit_as iyi v10)
+    chmod 0644 "$UP/gradlew"
+    git -C "$UP" add -A
+    git -C "$UP" commit -q -m "gradlew çalıştırılamaz"
+    C_NOX=$(git -C "$UP" rev-parse HEAD)
+    chmod 0755 "$UP/gradlew"
     chown -R nobody "$UP" # derleme kullanıcısı klonlar (git güvenli dizin denetimi)
-    export LIBRELOGIN_REPO="$UP"
+    export LIBRELOGIN_REPO="$UP" LIBRELOGIN_BUILD_USER=nobody
+    nobody_procs() { pgrep -U "$(id -u nobody)" 2>/dev/null | paste -sd, - || true; }
+    check "başlangıçta nobody süreci yok (testin ön koşulu)" eq "$(nobody_procs)" ""
     A="$T/root/artifacts"
 
     bl --commit "$C1"
@@ -249,7 +317,7 @@ else
     # shellcheck disable=SC2016  # $1/$2 iç kabukta genişler
     check "sha256sum -c geçer" bash -c 'cd "$1" && sha256sum -c --quiet "$2"' _ "$A" "LibreLogin-${C1:0:7}.jar.sha256"
     check "SHA-256 basıldı" out_has "SHA-256: $(sha256sum "$J1" | cut -d' ' -f1)"
-    check "sonraki adım basıldı" out_has "Sonraki adım: sudo mc download plugins velocity"
+    check "plugins.list başka jar'ı gösteriyor (--commit): sonraki adım bunu söyler" out_has "Sonraki adım: (plugins.list bu jar'ı göstermiyor)"
     check "gradle nobody ile çalıştı" out_has "sahte-gradle kullanici=nobody"
     check "gradle root ile çalışmadı" out_lacks "ROOT ILE CALISTI"
     check "gradlew --no-daemon build argümanları" out_has "args=--no-daemon build"
@@ -293,9 +361,84 @@ else
     bl --commit "$(printf 'dead%.0s' {1..10})"
     check "olmayan tam commit: hata" out_has "Commit bulunamadı"
     check "hatalardan sonra geçici dizin kalmadı" empty_dir "$T/tmp"
+    check "hatalardan sonra nobody süreci kalmadı" eq "$(nobody_procs)" ""
     LIBRELOGIN_REPO="$T/olmayan-depo" bl --commit "$C1"
     check "klonlanamazsa (ağ/depo): Türkçe hata" out_has "LibreLogin deposu klonlanamadı"
     check "önceki artifact'lar bozulmadı" eq "$(cat "$J1")" "$(printf 'PK\003\004LibreLogin v1')"
+
+    echo "# tutarlı config (commit network.env'den) → sonraki adım: mc download"
+    cp "$REPO/config/network.env" "$T/network.env.bak"
+    cp "$REPO/config/plugins.list" "$T/plugins.list.bak"
+    sed -i "s/^LIBRELOGIN_COMMIT=.*/LIBRELOGIN_COMMIT=\"$C2\"/" "$REPO/config/network.env"
+    sed -i "s|LibreLogin-[0-9a-f]\{7\}\.jar|LibreLogin-${C2:0:7}.jar|" "$REPO/config/plugins.list"
+    bl
+    check "network.env commit'iyle derleme çıkış 0" eq "$RC" 0
+    check "tutarlı config: uyarı yok" out_lacks "[uyarı]"
+    check "tutarlı config: sonraki adım mc download" out_has "Sonraki adım: sudo mc download plugins velocity"
+    cp "$T/network.env.bak" "$REPO/config/network.env"
+    cp "$T/plugins.list.bak" "$REPO/config/plugins.list"
+
+    echo "# uçbirim güvenliği: derleme root'un uçbirimine girdi enjekte edemez"
+    bl --commit "$C_TTY"
+    check "kaçış dizisi derlemesi çıkış 0" eq "$RC" 0
+    check "derleme çıktısı görünür" out_has "KACIS-SONU"
+    check "ESC ve BEL ayıklandı (kaçış dizisi uçbirime ulaşmaz)" out_has "]0;kami-baslikKACIS-SONU"
+    check "çıktıda ESC yok" no_esc
+    check "stdin tty değil" out_has "TIOCSTI-DENEME tty0=0"
+    if command -v script >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+        RC=0
+        # script: betik gerçek bir sözde uçbirimde (root'un oturumu gibi) çalışır.
+        OUT=$(script -qec "bash '$REPO/scripts/build-librelogin.sh' --commit $C_TTY" /dev/null 2>&1 </dev/null) || RC=$?
+        check "pty altında derleme çıkış 0" eq "$RC" 0
+        check "pty altında deneme çalıştı" out_has "TIOCSTI-DENEME"
+        check "TIOCSTI hiçbir tanıtıcıda işlemedi" out_lacks "ENJEKTE"
+        check "/dev/tty açılamadı (denetim uçbirimi yok)" out_lacks "devtty:ACIK"
+        check "pty altında stdin tty değil" out_has "TIOCSTI-DENEME tty0=0"
+    else
+        echo "  (TIOCSTI pty testi atlandı: script ve python3 gerekir)"
+    fi
+
+    echo "# geride kalan süreçler: çıktı okunmadan öldürülür, temizlik tamamlanır"
+    rm -rf "${T:?}/jvm-bos" && mkdir -p "$T/jvm-bos"
+    : >"$ADOPTIUM_SOURCES"
+    : >"$FAKE/apt.log"
+    MC_JVM_DIR="$T/jvm-bos" bl --commit "$C_ARTIK"
+    check "artık süreçli derleme çıkış 0" eq "$RC" 0
+    check "jar derlemenin ürettiği (sonradan değiştirilen değil)" eq "$(cat "$A/LibreLogin-${C_ARTIK:0:7}.jar" 2>/dev/null)" "$(printf 'PK\003\004GERCEK')"
+    check "derlemeden sonra nobody süreci kalmadı" eq "$(nobody_procs)" ""
+    check "geçici dizin silindi" empty_dir "$T/tmp"
+    check "kurulan JDK yine kaldırıldı" eq "$(apt_calls)" \
+        "apt-get install --no-install-recommends temurin-25-jdk|apt-get remove temurin-25-jdk"
+    check "temizlikte rm hatası yok" out_lacks "silinemedi"
+
+    echo "# derleme kullanıcısının önceden çalışan süreci varsa reddedilir"
+    setpriv --reuid=nobody --regid="$(id -g nobody)" --clear-groups -- sleep 60 </dev/null >/dev/null 2>&1 &
+    SLEEPER=$!
+    for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -n $(nobody_procs) ]] && break; sleep 0.1; done
+    : >"$FAKE/apt.log"
+    bl --commit "$C1"
+    check "süreci olan derleme kullanıcısı: çıkış ≠ 0" test "$RC" -ne 0
+    check "süreci olan derleme kullanıcısı: Türkçe mesaj" out_has "çalışan süreçleri var"
+    check "reddedilince klon/geçici dizin yok" empty_dir "$T/tmp"
+    check "reddedilince başkasının süreci öldürülmedi" kill -0 "$SLEEPER"
+    kill "$SLEEPER" 2>/dev/null || true
+    wait "$SLEEPER" 2>/dev/null || true
+
+    echo "# gradlew çalıştırılamazsa (126) ve noexec geçici dizin"
+    bl --commit "$C_NOX"
+    check "gradlew çalıştırılamaz: ağ değil, izin/noexec mesajı" out_has "gradlew çalıştırılamadı (çıkış 126"
+    check "gradlew çalıştırılamaz: 'Gradle derlemesi başarısız' denmez" out_lacks "Gradle derlemesi başarısız"
+    mkdir -p "$T/noexec"
+    if mount -t tmpfs -o noexec,mode=0755,size=16m tmpfs "$T/noexec" 2>/dev/null; then
+        TMPDIR="$T/noexec" bl --commit "$C1"
+        check "noexec TMPDIR: çıkış ≠ 0" test "$RC" -ne 0
+        check "noexec TMPDIR: anlaşılır mesaj + öneri" out_has "noexec bağlı bir dosya sisteminde"
+        check "noexec TMPDIR: 'ağ' hatası denmez" out_lacks "klonlanamadı"
+        check "noexec TMPDIR: geçici dizin silindi" empty_dir "$T/noexec"
+        umount "$T/noexec" || true
+    else
+        echo "  (noexec testi atlandı: tmpfs bağlanamadı)"
+    fi
 
     echo "# JDK 25 yoksa: temurin-25-jdk kurulur, sonra kaldırılır"
     rm -rf "${T:?}/jvm-bos" && mkdir -p "$T/jvm-bos"
@@ -337,8 +480,29 @@ else
     check "Adoptium deposu yoksa: hata" test "$RC" -ne 0
     check "Adoptium yok mesajı install.sh ve openjdk'yi önerir" out_has "openjdk-25-jdk-headless"
     check "Adoptium yokken apt çağrılmadı" eq "$(apt_calls)" ""
-    unset LIBRELOGIN_REPO
+    unset LIBRELOGIN_REPO LIBRELOGIN_BUILD_USER
 fi
+
+# -----------------------------------------------------------------------------
+echo "# temizlik: bir adım başarısız olsa da (errexit) diğerleri çalışır, çıkış kodu korunur"
+RC=0
+OUT=$(
+    # shellcheck disable=SC2317,SC2329  # aşağıdaki sahte fonksiyonlar cleanup içinden çağrılır
+    bash -c '
+        set -Eeuo pipefail
+        . "$1"
+        WORK=$(mktemp -d "$TMPDIR/temizlik.XXXXXX")
+        JDK_INSTALLED_BY_US=1 KEEP_JDK=0 JAVA_ALT_BEFORE=""
+        rm() { echo "rm başarısız (sahte)" >&2; return 1; }
+        pkg_installed() { return 0; }
+        trap cleanup EXIT
+        exit 0
+    ' _ "$REPO/scripts/build-librelogin.sh" 2>&1
+) || RC=$?
+check "rm başarısızken çıkış kodu korunur (0)" eq "$RC" 0
+check "rm başarısızken JDK yine kaldırıldı" out_has "temurin-25-jdk kaldırılıyor"
+check "rm hatası uyarı olarak bildirilir" out_has "Geçici dizin silinemedi"
+rm -rf "$T"/tmp/temizlik.* 2>/dev/null || true
 
 printf '\ntest_build_librelogin: %d geçti, %d başarısız\n' "$PASS" "$FAIL"
 ((FAIL == 0))

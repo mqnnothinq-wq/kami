@@ -74,10 +74,14 @@ inst
 check "kuru kurulum çıkış 0" eq "$RC" 0
 check "hiçbir şey yazılmadı (MC_ROOT, MC_ETC yok)" test ! -e "$T/root" -a ! -e "$T/etc"
 APT_LINE=$(grep -E '^\[kuru\] .*apt-get install .*mariadb-server' <<<"$OUT" | head -n1)
-for p in git python3 jq restic curl mariadb-server ufw fail2ban; do
+for p in git python3 jq procps restic curl mariadb-server ufw fail2ban; do
     check "paket listesinde $p" grep -qE "(^| )$p( |$)" <<<"$APT_LINE"
 done
 check "artifacts/ root 0755 oluşturulur (build-librelogin çıktısı)" out_has "[kuru] install -d -m 0755 -o root -g root $T/root/artifacts"
+if ! id -u kami-build >/dev/null 2>&1; then
+    check "derleme kullanıcısı kami-build oluşturulur (grupsuz, evsiz, nologin)" \
+        out_has "[kuru] useradd --system --gid kami-build --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin"
+fi
 check "servers/ minecraft 0750" out_has "[kuru] install -d -m 0750 -o minecraft -g minecraft $T/root/servers"
 check "betik izinleri düzeltilir (build-librelogin.sh dahil)" out_has "chmod 0755 $REPO/scripts/build-librelogin.sh"
 

@@ -139,16 +139,25 @@ sudo mc build-librelogin --dry-run         # yalnız ne yapılacağını yazar
 
 `https://github.com/kyngs/LibreLogin` (dal `dev`) deposunu `/var/tmp` altında geçici bir dizine
 klonlar, commit'e geçer; JDK 25 `javac` yoksa `temurin-25-jdk`'yı (Adoptium deposu) geçici kurar;
-`./gradlew --no-daemon build` komutunu **`nobody` kullanıcısıyla** (asla root değil) çalıştırır;
-sonucu `/opt/minecraft/artifacts/LibreLogin-<ilk7>.jar` (0644 root) ve `.sha256` olarak koyar,
-özeti ve sonraki adımı (`sudo mc download plugins velocity`) yazar. `plugins.list`'teki satır
-başka bir dosyayı gösteriyorsa ya da LibreLogin `local` satırı yoksa uyarır. Ağ/derleme hatasında
-Türkçe bir mesajla durur; aynı anda yalnız bir derleme çalışır. Kurduğu JDK'yı (başarısız
-derlemede de) kaldırır ve `/usr/bin/java` seçimi değiştiyse eskisini geri koyar. Derleme
-kullanıcısına temiz bir ortam verilir; yalnız vekil sunucu ve sertifika değişkenleri
-(`http(s)_proxy`, `no_proxy`, `JAVA_TOOL_OPTIONS`, `GRADLE_OPTS`, `SSL_CERT_FILE`,
-`GIT_SSL_CAINFO`) aktarılır (sudo bunları varsayılan olarak siler; gerekirse
-`sudo --preserve-env=https_proxy,…` ile verin). `--dry-run` root gerektirmez.
+`./gradlew --no-daemon build` komutunu **ayrı `kami-build` sistem kullanıcısıyla** (asla root ya
+da `minecraft` değil; install.sh oluşturur, yoksa betik oluşturur) denetim uçbirimi olmadan
+çalıştırır; Gradle bitince bu kullanıcının tüm süreçlerini durdurur; sonucu
+`/opt/minecraft/artifacts/LibreLogin-<ilk7>.jar` (0644 root) ve `.sha256` olarak koyar, özeti ve
+sonraki adımı (`sudo mc download plugins velocity`) yazar.
+
+- `network.env` `LIBRELOGIN_COMMIT` ile `plugins.list`'teki LibreLogin satırı farklı jar'ları
+  gösteriyorsa derlemeye başlamadan **hata** verir. `--commit` ile verilen commit'te yalnız uyarır
+  (o jar'ı `mc download` kurmaz; iki satırı birlikte güncelleyin). LibreLogin `local` satırı hiç
+  yoksa uyarır.
+- `kami-build`'in çalışan bir süreci varsa derlemeyi reddeder; geçici dizin noexec bağlıysa
+  anlaşılır bir hatayla durur (`sudo env TMPDIR=<çalıştırılabilir dizin> mc build-librelogin`).
+- Ağ/derleme hatasında Türkçe bir mesajla durur; aynı anda yalnız bir derleme çalışır. Kurduğu
+  JDK'yı (başarısız derlemede de) kaldırır ve `/usr/bin/java` seçimi değiştiyse eskisini geri koyar.
+- Derleme kullanıcısına temiz bir ortam verilir; yalnız vekil sunucu ve sertifika değişkenleri
+  (`http(s)_proxy`, `no_proxy`, `JAVA_TOOL_OPTIONS`, `GRADLE_OPTS`, `SSL_CERT_FILE`,
+  `GIT_SSL_CAINFO`) aktarılır (sudo bunları varsayılan olarak siler; gerekirse
+  `sudo --preserve-env=https_proxy,…` ile verin).
+- `--dry-run` root gerektirmez ve hiçbir şey kurmaz, indirmez, yazmaz.
 
 ## Çalıştırma
 
@@ -345,7 +354,7 @@ install.sh onu silmez.
 | `MC_READY_TIMEOUT` | `mc init` | Hazır satırı için en uzun bekleme (sn, varsayılan 600) |
 | `MC_RCON_WAIT` | `mc init` | RCON'un açılması için bekleme (sn, varsayılan 60) |
 | `MC_LOCK_WAIT` | `mc countdown-restart` | Yedek kilidi için bekleme (sn, varsayılan 900) |
-| `LIBRELOGIN_BUILD_USER`, `TMPDIR` | `mc build-librelogin` | Derleme kullanıcısı (varsayılan `nobody`; root olamaz), geçici dizin kökü (varsayılan `/var/tmp`) |
+| `LIBRELOGIN_BUILD_USER`, `TMPDIR` | `mc build-librelogin` | Derleme kullanıcısı (varsayılan `kami-build`; root, `minecraft` ya da ek gruplu bir kullanıcı olamaz), geçici dizin kökü (varsayılan `/var/tmp`; noexec olmamalı). sudo ile aktarmak için: `sudo env TMPDIR=/opt/kami-tmp mc build-librelogin` |
 | `YQ` | `mc apply`, testler | mikefarah yq yolu (varsayılan PATH'teki `yq`) |
 
 `MC_ROOT`, `MC_ETC`, `MC_USER`, `MC_NO_SYSTEMD` gibi değişkenler yalnız testler içindir; gerçek

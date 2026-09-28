@@ -36,7 +36,7 @@ Kurulum ve yapılandırma:
                                          yeni backend sunucusu tanımlar
   build-librelogin [--commit <sha>] [--keep-jdk] [--dry-run]
                                          LibreLogin jar'ını sabit commit'ten derler (JDK 25,
-                                         yetkisiz kullanıcıyla) → $MC_ROOT/artifacts/
+                                         kami-build kullanıcısıyla) → $MC_ROOT/artifacts/
                                          sonra: sudo mc download plugins velocity
 
 Çalıştırma:
@@ -934,6 +934,32 @@ doctor_jars() {
     done < <(list_servers)
 }
 
+# network.env LIBRELOGIN_COMMIT ↔ plugins.list LibreLogin "local" satırı ↔ derlenmiş jar (SPEC §17).
+# İkisi birlikte değişmeli; yoksa 'mc download' eski (ya da olmayan) jar'ı kurar.
+doctor_librelogin() {
+    local id want path
+    local -a ids=()
+    mapfile -t ids < <(plugin_local_ids LibreLogin)
+    ((${#ids[@]})) || return 0
+    if [[ ! ${LIBRELOGIN_COMMIT:-} =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+        d_crit "LibreLogin: network.env LIBRELOGIN_COMMIT geçersiz ya da tanımsız; plugins.list yerel derleme bekliyor."
+        return 0
+    fi
+    want=$(librelogin_jar "$LIBRELOGIN_COMMIT")
+    for id in "${ids[@]}"; do
+        if [[ ${id##*/} != "$want" ]]; then
+            d_crit "LibreLogin: plugins.list ${id##*/} gösteriyor ama network.env LIBRELOGIN_COMMIT $want gerektiriyor — ikisini BİRLİKTE güncelleyin; sonra: sudo mc build-librelogin && sudo mc download plugins velocity"
+            continue
+        fi
+        path=$(local_expand "$id")
+        if [[ -f $path ]]; then
+            d_ok "LibreLogin: $want derlenmiş."
+        else
+            d_warn "LibreLogin: $path yok — sudo mc build-librelogin"
+        fi
+    done
+}
+
 cmd_doctor() {
     (($# == 0)) || die "Kullanım: mc doctor"
     load_network_env
@@ -947,6 +973,7 @@ cmd_doctor() {
     doctor_disk
     doctor_backup
     doctor_jars
+    doctor_librelogin
     if ((${#DOC_SKIPPED[@]})); then
         local skipped
         skipped=$(printf '%s; ' "${DOC_SKIPPED[@]}")

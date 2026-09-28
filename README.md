@@ -116,7 +116,7 @@ içindeki **giriş duman testini** mutlaka yapın.
 | `scripts/apply-config.sh` | `config/` ağacını sunucu dizinlerine uygular, `jvm.env` ve systemd eklerini üretir |
 | `scripts/backup.sh` | restic ile yedek, budama, listeleme, geri yükleme |
 | `scripts/new-server.sh` | Yeni bir Paper sunucusu tanımlar |
-| `scripts/build-librelogin.sh` | LibreLogin'i sabit commit'ten derler |
+| `scripts/build-librelogin.sh` | LibreLogin'i sabit commit'ten, ayrı `kami-build` kullanıcısıyla derler |
 | `scripts/lib.sh`, `scripts/rcon.py` | Ortak yardımcılar, bağımlılıksız RCON istemcisi |
 | `systemd/` | `mc@.service` şablonu, konsol FIFO'su ve zamanlayıcılar (yedek, budama, günlük yeniden başlatma) |
 | `host/` | İşletim sistemi ayar dosyaları (sysctl, journald, MariaDB, fail2ban, THP, otomatik güncelleme) |
