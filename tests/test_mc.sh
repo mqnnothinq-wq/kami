@@ -138,7 +138,14 @@ EOF
 start_mock_rcon() { # tüm backend'lerin RCON_PORT'u sahte sunucuya yönlendirilir
     cat >"$T/mock_rcon.py" <<'EOF'
 import os, socket, struct, sys, threading
-port_file, log_file, password = sys.argv[1:4]
+port_file, log_file, password, reject_file = sys.argv[1:5]
+def rejected(body):
+    # reject_file: satır başına bir önek; eşleşen komuta Brigadier hata yanıtı döner
+    try:
+        with open(reject_file, encoding="utf-8") as f:
+            return any(p and body.startswith(p) for p in f.read().splitlines())
+    except FileNotFoundError:
+        return False
 lock = threading.Lock()
 def rx(c, n):
     b = b""
@@ -166,7 +173,10 @@ def handle(c):
                 if os.environ.get("FAKE_LOG"):
                     with lock, open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as f:
                         f.write("rcon " + body + "\n")
-                send(c, i, 0, "Tamam: " + body)
+                if rejected(body):
+                    send(c, i, 0, "Unknown or incomplete command, see below for error\n" + body + "<--[HERE]")
+                else:
+                    send(c, i, 0, "Tamam: " + body)
             else:
                 send(c, i, 0, "Unknown request %x" % t)
     except EOFError:
@@ -184,9 +194,10 @@ while True:
     c, _ = s.accept()
     threading.Thread(target=handle, args=(c,), daemon=True).start()
 EOF
-    RCON_LOG="$T/rcon.log"
+    RCON_LOG="$T/rcon.log" RCON_REJECT="$T/rcon.reject"
     : >"$RCON_LOG"
-    python3 "$T/mock_rcon.py" "$T/rcon.port" "$RCON_LOG" test-rcon &
+    : >"$RCON_REJECT"
+    python3 "$T/mock_rcon.py" "$T/rcon.port" "$RCON_LOG" test-rcon "$RCON_REJECT" &
     MOCK_PID=$!
     local i
     for ((i = 0; i < 100; i++)); do
@@ -213,7 +224,7 @@ mc help
 check "mc help çıkış 0" eq "$RC" 0
 check "yardım Türkçe başlık" out_has "Kullanım: mc <komut>"
 missing=""
-for c in download apply init new-server start stop restart status log cmd rcon say countdown-restart backup restore doctor; do
+for c in download apply init new-server build-librelogin start stop restart status log cmd rcon say countdown-restart backup restore doctor; do
     grep -qE "^  $c( |$)" <<<"$OUT" || missing+=" $c"
 done
 check "yardım tüm alt komutları listeler" eq "$missing" ""
@@ -303,8 +314,8 @@ check "cmd velocity'ye de yazar" eq "$(cat "$T/run/velocity.stdin")" "glist all"
 mc cmd lobby "$(printf 'say a\nop kotu')"
 check "satır sonu içeren komut reddedildi" test "$RC" -ne 0
 
-echo "# delegasyon (download/backup/restore/apply)"
-for s in download backup; do
+echo "# delegasyon (download/backup/restore/apply/build-librelogin)"
+for s in download backup build-librelogin; do
     printf '#!/usr/bin/env bash\necho "%s.sh $*"\n' "$s" >"$REPO/scripts/$s.sh"
 done
 mc download plugins lobby
@@ -317,6 +328,8 @@ mc backup list
 check "backup list → backup.sh list" eq "$OUT" "backup.sh list"
 mc restore survival abc123
 check "restore → backup.sh restore <srv> <snapshot>" eq "$OUT" "backup.sh restore survival abc123"
+mc build-librelogin --commit 39397c4 --keep-jdk --dry-run
+check "build-librelogin → build-librelogin.sh argümanlarla" eq "$OUT" "build-librelogin.sh --commit 39397c4 --keep-jdk --dry-run"
 mc apply --dry-run lobby
 check "apply → apply-config.sh (dry-run)" out_has "hiçbir dosya yazılmadı"
 rm -f "$REPO/scripts/download.sh"
@@ -529,6 +542,40 @@ check "init all: limbo ve backend'ler önce, velocity en son" eq "$(unit_calls)"
     "start mc@limbo.service|stop mc@limbo.service|start mc@lobby.service|stop mc@lobby.service|start mc@lobby.service|stop mc@lobby.service|start mc@survival.service|stop mc@survival.service|start mc@survival.service|stop mc@survival.service|start mc@velocity.service|stop mc@velocity.service"
 check "init all: velocity'ye eula.txt yazılmadı" test ! -e "$T/root/servers/velocity/eula.txt"
 check "init all: survival init komutu çalıştı" grep -qxF "gamerule minecraft:spawn_phantoms false" "$RCON_LOG"
+
+echo "# mc init: 'gamerule minecraft:' reddedilirse öneksiz biçim bir kez denenir"
+clear_active
+: >"$RCON_LOG"
+printf 'gamerule minecraft:\n' >"$RCON_REJECT"
+MC_NO_SYSTEMD=0 mc init lobby --accept-eula
+check "önekli biçim reddedilince init yine çıkış 0" eq "$RC" 0
+check "her kural için önce önekli, sonra (bir kez) öneksiz biçim" eq "$(paste -sd'|' - <"$RCON_LOG")" \
+    "list|gamerule minecraft:spawn_mobs false|gamerule spawn_mobs false|gamerule minecraft:advance_time false|gamerule advance_time false|lp group default permission set kami.test true"
+check "reddedilen biçim günlükte" out_has "önekli biçim reddedildi: 'gamerule minecraft:spawn_mobs false'"
+check "çalışan biçim günlükte" out_has "öneksiz biçim çalıştı: 'gamerule spawn_mobs false'"
+check "özet: hangi kurallar öneksiz çalıştı" out_has "2 oyun kuralı yalnız öneksiz biçimle çalıştı: 'gamerule spawn_mobs false', 'gamerule advance_time false'"
+check "başarı sayımı" out_has "lobby: 3 init komutu çalıştı, 0 başarısız."
+
+clear_active
+: >"$RCON_LOG"
+printf 'gamerule \nlp \n' >"$RCON_REJECT"
+MC_NO_SYSTEMD=0 mc init lobby --accept-eula
+check "iki biçim de reddedilirse init çıkış 1" test "$RC" -ne 0
+check "kural başına en çok iki deneme" eq "$(grep -c '^gamerule ' "$RCON_LOG")" 4
+check "iki biçimde de başarısız mesajı" out_has "oyun kuralı iki biçimde de başarısız: 'gamerule minecraft:spawn_mobs false' ve 'gamerule spawn_mobs false'"
+check "gamerule dışı komut hata yanıtında yeniden denenmez" eq "$(grep -c '^lp ' "$RCON_LOG")" 1
+check "hata yanıtı veren komut başarısız sayılır" out_has "komut başarısız: lp group default permission set kami.test true"
+check "başarısızlık özeti" out_has "lobby: 0 init komutu çalıştı, 3 başarısız."
+check "init başarısız sunucuyu bildirir" out_has "Bazı init komutları başarısız oldu: lobby"
+check "başarısızlıkta sunucu yine durduruldu" test ! -e "$FAKE_STATE/mc@lobby.service.active"
+
+clear_active
+: >"$RCON_LOG"
+printf 'gamerule spawn_mobs\n' >"$RCON_REJECT"
+MC_NO_SYSTEMD=0 mc init lobby --accept-eula
+check "önekli biçim çalışınca ikinci deneme yok" eq "$(grep -c '^gamerule ' "$RCON_LOG")" 2
+check "önekli biçim çalışınca uyarı yok" out_lacks "öneksiz"
+: >"$RCON_REJECT"
 stop_mock_rcon
 
 echo "# init güvenlik: sunucu dizinindeki sembolik bağ root yetkisiyle izlenmez"

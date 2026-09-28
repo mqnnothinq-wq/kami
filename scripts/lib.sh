@@ -5,6 +5,17 @@
 #
 # Bu dosya kendi başına çalıştırılmaz; seçenek (set -e vb.) değiştirmez,
 # onu çağıran betik yapar.
+#
+# İçindekiler (ayrıntı her fonksiyonun üstünde):
+#   Günlük/hata  : log_info log_ok log_warn log_error die require_root require_cmd
+#   Yapılandırma : load_network_env load_secrets render_placeholders
+#   Sunucular    : list_servers list_backends list_proxies list_nonproxy server_exists server_get
+#                  validate_server_name resolve_targets
+#   systemd      : unit_of is_running server_running
+#   Yetki ayrımı : as_user as_mc require_mc_user
+#   Kilit        : backup_lock
+#   Bellek       : heap_to_mib fmt_mib
+# Bir yardımcı birden çok betikte gerekiyorsa buraya taşıyın; betiklerde kopyası olmasın.
 
 # --- Yollar ---------------------------------------------------------------
 # Depo kökü: bu dosyanın bir üst dizini (scripts/..).
@@ -74,6 +85,23 @@ list_backends() {
     local s
     while read -r s; do
         [[ $(server_get "$s" TYPE) == paper ]] && printf '%s\n' "$s"
+    done < <(list_servers)
+}
+
+# Yalnızca proxy (TYPE=velocity) sunucuları.
+list_proxies() {
+    local s
+    while IFS= read -r s; do
+        if [[ -n $s && $(server_get "$s" TYPE) == velocity ]]; then printf '%s\n' "$s"; fi
+    done < <(list_servers)
+}
+
+# Proxy dışındaki tüm sunucular (paper + limbo), alfabetik. list_backends yalnız paper döndürür;
+# başlatma/durdurma sırası ve velocity'nin kapanış sırası (10-order.conf) bunu kullanır.
+list_nonproxy() {
+    local s
+    while IFS= read -r s; do
+        if [[ -n $s && $(server_get "$s" TYPE) != velocity ]]; then printf '%s\n' "$s"; fi
     done < <(list_servers)
 }
 
@@ -159,3 +187,83 @@ PY
 unit_of() { printf 'mc@%s.service' "$1"; }
 
 is_running() { systemctl is-active --quiet "$(unit_of "$1")"; }
+
+# server_running <sunucu> — is_running gibi, ama systemd olmayan ortamda (MC_NO_SYSTEMD=1 ya da
+# systemctl yok) "çalışmıyor" der; hata vermez.
+server_running() {
+    [[ ${MC_NO_SYSTEMD:-0} == 1 ]] && return 1
+    command -v systemctl >/dev/null 2>&1 || return 1
+    is_running "$1"
+}
+
+# --- Yetki ayrımı ----------------------------------------------------------
+# as_user <kullanıcı> <komut...> — root iken komutu verilen kullanıcının kimliğiyle (birincil grup
+# + ek gruplar) ve "/" çalışma dizininde çalıştırır: setpriv, yoksa runuser. Root değilsek ya da
+# kullanıcının kendisi root ise (uid 0; ör. testler) komut olduğu gibi çalışır. Kullanıcı yoksa
+# root yetkisiyle çalıştırmak yerine hata verir (dönüş 1).
+as_user() {
+    local user=$1 uid gid
+    shift
+    if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+        "$@"
+        return
+    fi
+    if ! uid=$(id -u -- "$user" 2>/dev/null) || ! gid=$(id -g -- "$user" 2>/dev/null); then
+        log_error "Kullanıcı yok: '$user' — önce scripts/install.sh çalıştırın."
+        return 1
+    fi
+    if ((uid == 0)); then
+        "$@"
+        return
+    fi
+    if command -v setpriv >/dev/null 2>&1; then
+        (cd / && exec setpriv --reuid="$uid" --regid="$gid" --init-groups -- "$@")
+    else
+        (cd / && exec runuser -u "$user" -- "$@")
+    fi
+}
+
+# require_mc_user — root iken çağrılır: sunucu kullanıcısı ($MC_USER) var mı ve kimlik düşürme aracı
+# (setpriv ya da runuser) kurulu mu denetler; yoksa çıkar. MC_GROUP'a birincil grubun adını yazar.
+require_mc_user() {
+    MC_GROUP=$(id -gn -- "$MC_USER" 2>/dev/null) ||
+        die "Kullanıcı/grup yok: $MC_USER — önce scripts/install.sh çalıştırın."
+    command -v setpriv >/dev/null 2>&1 || require_cmd runuser
+}
+
+# as_mc <komut...> — komutu sunucu dosyalarının sahibi ($MC_USER) olarak çalıştırır.
+# Sunucu dizinleri minecraft'ça yazılabilir: orada çalışan (ya da ele geçirilmiş) bir sunucu
+# sembolik bağ bırakabilir. Bu dizinlerdeki okuma/yazma/silme işlemleri bununla yapılır ki bağ
+# izlense bile minecraft'ın zaten erişebildiğinden fazlasına ulaşılamasın.
+as_mc() { as_user "$MC_USER" "$@"; }
+
+# --- Kilit -----------------------------------------------------------------
+# backup_lock <bekleme-sn> <hata-mesajı> — $MC_ROOT/.backup.lock kilidini alır; süreç bitene dek
+# tutulur. Yedek, budama, geri yükleme ve countdown-restart bu kilidi paylaşır (yedek alınırken
+# sunucular yeniden başlatılmaz, iki yedek üst üste binmez). $MC_ROOT yoksa (kurulum yok) atlanır.
+backup_lock() {
+    local fd
+    [[ -d $MC_ROOT ]] || return 0
+    require_cmd flock
+    exec {fd}>>"$MC_ROOT/.backup.lock"
+    flock -w "$1" "$fd" || die "$2"
+}
+
+# --- Bellek birimleri -------------------------------------------------------
+# heap_to_mib <HEAP> — "1536M", "7G", "512K", "1073741824" → MiB (tamsayı). Geçersizse dönüş 1.
+heap_to_mib() {
+    local v=${1^^} n
+    [[ $v =~ ^([0-9]+)([KMG]?)$ ]] || return 1
+    n=${BASH_REMATCH[1]}
+    case ${BASH_REMATCH[2]} in
+        G) echo $((n * 1024)) ;;
+        M) echo "$n" ;;
+        K) echo $((n / 1024)) ;;
+        *) echo $((n / 1048576)) ;;
+    esac
+}
+
+# fmt_mib <MiB> — okunur biçim: "900 MiB", "9.5 GiB".
+fmt_mib() {
+    awk -v m="$1" 'BEGIN { if (m >= 1024) printf "%.1f GiB", m / 1024; else printf "%d MiB", m }'
+}

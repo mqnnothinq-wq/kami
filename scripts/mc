@@ -27,13 +27,17 @@ Kullanım: mc <komut> [argümanlar]
 
 Kurulum ve yapılandırma:
   download [--dry-run] [all|core|plugins] [sunucu]
-                                         Paper/Velocity ve eklentileri indirir
+                                         Paper/Velocity/PicoLimbo ve eklentileri indirir
   apply [--dry-run] [sunucu|all]         config/ ağacını sunuculara uygular
   init <sunucu|all> --accept-eula        ilk kurulum: EULA, config, ilk açılış, config'i
                                          yeniden uygula, ikinci açılışta init-commands.txt
                                          (limbo: yalnız açılış + port denetimi)
   new-server <ad> <port> <heap> [--from survival]
                                          yeni backend sunucusu tanımlar
+  build-librelogin [--commit <sha>] [--keep-jdk] [--dry-run]
+                                         LibreLogin jar'ını sabit commit'ten derler (JDK 25,
+                                         yetkisiz kullanıcıyla) → $MC_ROOT/artifacts/
+                                         sonra: sudo mc download plugins velocity
 
 Çalıştırma:
   start [sunucu|all]      başlatır (all: önce backend'ler ve limbo, sonra velocity)
@@ -66,7 +70,8 @@ EOF
 
 # --- Yardımcılar -------------------------------------------------------------
 
-# Başka bir betiğe devreder (download.sh, backup.sh, apply-config.sh, new-server.sh).
+# Başka bir betiğe devreder (download.sh, backup.sh, apply-config.sh, new-server.sh,
+# build-librelogin.sh).
 delegate() {
     local script="$SCRIPTS_DIR/$1"
     shift
@@ -74,36 +79,10 @@ delegate() {
     exec bash "$script" "$@"
 }
 
-list_proxies() {
-    local s
-    while IFS= read -r s; do
-        if [[ $(server_get "$s" TYPE) == velocity ]]; then printf '%s\n' "$s"; fi
-    done < <(list_servers)
-}
+# list_proxies, list_nonproxy, as_mc, backup_lock, heap_to_mib, fmt_mib: lib.sh
 
-# Proxy dışındaki tüm sunucular (paper + limbo); lib.sh list_backends yalnız paper döndürür.
-list_nonproxy() {
-    local s
-    while IFS= read -r s; do
-        if [[ -n $s && $(server_get "$s" TYPE) != velocity ]]; then printf '%s\n' "$s"; fi
-    done < <(list_servers)
-}
-
-IS_ROOT=0
-if [[ ${EUID:-$(id -u)} -eq 0 ]]; then IS_ROOT=1; fi
+# mc init'te $MC_USER'ın birincil grubu (sunucu dizini oluşturulurken; require_mc_user ayarlar).
 MC_GROUP=""
-
-# Komutu sunucu dosyalarının sahibi olarak çalıştırır (root değilsek olduğu gibi). Sunucu
-# dizinleri minecraft'ındır; oradaki bir sembolik bağ root yetkisiyle izlenmemelidir.
-as_mc() {
-    if ((!IS_ROOT)); then
-        "$@"
-    elif command -v setpriv >/dev/null 2>&1; then
-        (cd / && exec setpriv --reuid="$MC_USER" --regid="${MC_GROUP:-$MC_USER}" --init-groups -- "$@")
-    else
-        (cd / && exec runuser -u "$MC_USER" -- "$@")
-    fi
-}
 
 # <port> dinlenen yerel adresleri (ss -ltn) satır satır yazar.
 listen_addrs() {
@@ -171,22 +150,6 @@ fmt_bytes() {
     else
         printf '%s' "-"
     fi
-}
-
-fmt_mib() {
-    awk -v m="$1" 'BEGIN { if (m >= 1024) printf "%.1f GiB", m / 1024; else printf "%d MiB", m }'
-}
-
-heap_to_mib() {
-    local v=${1^^} n
-    [[ $v =~ ^([0-9]+)([KMG]?)$ ]] || return 1
-    n=${BASH_REMATCH[1]}
-    case ${BASH_REMATCH[2]} in
-        G) echo $((n * 1024)) ;;
-        M) echo "$n" ;;
-        K) echo $((n / 1024)) ;;
-        *) echo $((n / 1048576)) ;;
-    esac
 }
 
 nap() {
@@ -334,18 +297,6 @@ cmd_say() {
     broadcast "$*"
 }
 
-# Yedek/geri yükleme ile aynı kilidi alır (backup.sh): yedek alınırken ya da geri yüklenirken
-# sunucular yeniden başlatılmaz. Kilit süreç bitene dek tutulur.
-take_backup_lock() {
-    local fd wait=${MC_LOCK_WAIT:-900}
-    [[ -d $MC_ROOT ]] || return 0
-    require_cmd flock
-    exec {fd}>>"$MC_ROOT/.backup.lock"
-    if ! flock -w "$wait" "$fd"; then
-        die "Yedekleme/geri yükleme sürüyor ($MC_ROOT/.backup.lock, $wait sn beklendi); yeniden başlatma atlandı."
-    fi
-}
-
 # Şu an çalışan sunucuları yeniden başlatır: velocity durur → diğerleri durur → diğerleri
 # başlar → velocity başlar. Bilerek durdurulmuş sunucular (bakım, geri yükleme) kapalı kalır.
 restart_running() {
@@ -378,7 +329,9 @@ cmd_countdown_restart() {
         log_warn "Hiçbir sunucu çalışmıyor; yeniden başlatma atlandı (bakımda olabilir)."
         return 0
     fi
-    take_backup_lock
+    # Yedek/geri yükleme ile aynı kilit (lib.sh): yedek alınırken sunucular yeniden başlatılmaz.
+    local wait=${MC_LOCK_WAIT:-900}
+    backup_lock "$wait" "Yedekleme/geri yükleme sürüyor ($MC_ROOT/.backup.lock, $wait sn beklendi); yeniden başlatma atlandı."
     log_info "Geri sayım başladı: $min dakika."
     broadcast "Sunucu $min dakika içinde yeniden başlatılacak."
     if ((min > 1)); then
@@ -525,8 +478,32 @@ wait_rcon() { # <sunucu> — RCON dinleyicisi "Done"dan biraz sonra açılabilir
     done
 }
 
+# Sunucu, bilinmeyen ya da hatalı bir komutu da RCON'dan "başarıyla" yanıtlar; hata yalnız
+# metinden anlaşılır (Brigadier: "Unknown or incomplete command, see below for error",
+# "Incorrect argument for command", hatalı yerde "…<--[HERE]").
+rcon_reply_is_error() { # <yanıt>
+    grep -qiE -- 'Unknown or incomplete command|Incorrect argument|Unknown game ?rule|<--\[HERE\]' <<<"$1"
+}
+
+# rcon_try <sunucu> <komut> — komutu çalıştırır; yanıt RCON_REPLY'de. Dönüş 0: RCON başarılı ve
+# yanıt hata gibi görünmüyor. rcon.py hatası (bağlantı/şifre; yanıt boş olabilir) da hatadır.
+RCON_REPLY=""
+rcon_try() {
+    local rc=0
+    RCON_REPLY=$(rcon_exec "$1" "$2" 2>&1) || rc=$?
+    ((rc == 0)) && ! rcon_reply_is_error "$RCON_REPLY"
+}
+
+print_reply() { # yanıtı girintili basar (boşsa hiçbir şey)
+    [[ -z $1 ]] || printf '    %s\n' "${1//$'\n'/$'\n'    }"
+}
+
+# init-commands.txt satırlarını sırayla RCON ile çalıştırır. "gamerule minecraft:<ad> …" satırı
+# reddedilirse (26.x'te önekli ad beklenir, ama sürüm/yazım farkında önek kabul edilmeyebilir)
+# bir kez öneksiz ("gamerule <ad> …") denenir ve hangi biçimin çalıştığı günlüğe yazılır.
 run_init_commands() { # <sunucu>
-    local s=$1 f line out fail=0 n=0
+    local s=$1 f line alt first fail=0 n=0
+    local -a fallback=()
     f="$CONFIG_DIR/servers/$s/init-commands.txt"
     if [[ ! -f $f ]]; then
         log_info "$s: init-commands.txt yok; atlanıyor."
@@ -540,15 +517,36 @@ run_init_commands() { # <sunucu>
         [[ -n $line && $line != \#* ]] || continue
         line=${line#/}
         log_info "RCON $s> $line"
-        if out=$(rcon_exec "$s" "$line" 2>&1); then
+        if rcon_try "$s" "$line"; then
             n=$((n + 1))
-            [[ -z $out ]] || printf '    %s\n' "$out"
-        else
-            fail=$((fail + 1))
-            log_warn "$s: komut başarısız: $line — $out"
+            print_reply "$RCON_REPLY"
+            continue
         fi
+        first=${RCON_REPLY:-(yanıt yok)}
+        if [[ $line == 'gamerule minecraft:'?* ]]; then
+            alt="gamerule ${line#gamerule minecraft:}"
+            log_warn "$s: önekli biçim reddedildi: '$line' — ${first//$'\n'/ }"
+            log_info "RCON $s> $alt   (öneksiz ikinci deneme)"
+            if rcon_try "$s" "$alt"; then
+                n=$((n + 1))
+                fallback+=("$alt")
+                print_reply "$RCON_REPLY"
+                log_ok "$s: öneksiz biçim çalıştı: '$alt' ('$line' yerine)."
+                continue
+            fi
+            fail=$((fail + 1))
+            RCON_REPLY=${RCON_REPLY:-(yanıt yok)}
+            log_warn "$s: oyun kuralı iki biçimde de başarısız: '$line' ve '$alt' — ${RCON_REPLY//$'\n'/ }"
+            continue
+        fi
+        fail=$((fail + 1))
+        log_warn "$s: komut başarısız: $line — ${first//$'\n'/ }"
     done 3<"$f"
     log_info "$s: $n init komutu çalıştı, $fail başarısız."
+    if ((${#fallback[@]})); then
+        alt=$(printf "'%s', " "${fallback[@]}")
+        log_warn "$s: ${#fallback[@]} oyun kuralı yalnız öneksiz biçimle çalıştı: ${alt%, } — config/servers/$s/init-commands.txt'yi buna göre güncelleyin."
+    fi
     ((fail == 0))
 }
 
@@ -627,10 +625,7 @@ cmd_init() {
         exit 1
     fi
     require_root
-    { id -u "$MC_USER" && getent group "$MC_USER"; } >/dev/null 2>&1 \
-        || die "Kullanıcı/grup yok: $MC_USER — önce scripts/install.sh çalıştırın."
-    MC_GROUP=$(id -gn "$MC_USER")
-    command -v setpriv >/dev/null 2>&1 || require_cmd runuser
+    require_mc_user # MC_GROUP'u da ayarlar
 
     mapfile -t targets <<<"$list"
 
@@ -983,6 +978,7 @@ main() {
         backup) delegate backup.sh "$@" ;;
         restore) delegate backup.sh restore "$@" ;;
         new-server) delegate new-server.sh "$@" ;;
+        build-librelogin) delegate build-librelogin.sh "$@" ;;
         doctor) cmd_doctor "$@" ;;
         *) die "Bilinmeyen komut: $cmd — komutlar için: mc help" ;;
     esac

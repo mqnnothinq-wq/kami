@@ -8,7 +8,8 @@
 #
 # Güvenlik: sunucu dizinleri minecraft kullanıcısınındır; orada çalışan (ya da ele geçirilmiş) bir
 # sunucu sembolik bağ bırakabilir. Bu yüzden root iken sunucu dizinlerindeki tüm okuma/yazmalar
-# minecraft kimliğiyle (setpriv, yoksa runuser) yapılır ve yolunda sembolik bağ olan hedef reddedilir.
+# minecraft kimliğiyle (lib.sh as_mc: setpriv, yoksa runuser) yapılır ve yolunda sembolik bağ olan
+# hedef reddedilir.
 #
 # Test/ortam değişkenleri: YQ (mikefarah yq yolu), MC_SYSTEMD_DIR (drop-in kökü),
 # MC_NO_SYSTEMD=1 (systemctl çağrılmaz) + lib.sh'deki MC_ROOT, MC_ETC, MC_USER.
@@ -67,32 +68,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Komutu sunucu dosyalarının sahibi olarak çalıştırır (root değilsek olduğu gibi).
-# Sembolik bağ izlense bile minecraft'ın zaten erişebildiğinden fazlasına ulaşılamaz.
-as_mc() {
-    if ((!IS_ROOT)); then
-        "$@"
-    elif command -v setpriv >/dev/null 2>&1; then
-        (cd / && exec setpriv --reuid="$MC_USER" --regid="$MC_GROUP" --init-groups -- "$@")
-    else
-        (cd / && exec runuser -u "$MC_USER" -- "$@")
-    fi
-}
-
 need_yq() {
     local v
     ((YQ_OK)) && return 0
     v=$("$YQ" --version 2>&1) || die "yq çalıştırılamadı ('$YQ'). mikefarah yq v4 gerekli (scripts/install.sh kurar)."
     [[ $v == *mikefarah* ]] || die "'$YQ' mikefarah yq değil ($v). Debian/Ubuntu'daki python 'yq' paketi uyumsuzdur; YQ=/yol/yq ile belirtin."
     YQ_OK=1
-}
-
-# Proxy dışındaki tüm sunucular (paper + limbo); lib.sh list_backends yalnız paper döndürür.
-list_nonproxy() {
-    local s
-    while IFS= read -r s; do
-        if [[ -n $s && $(server_get "$s" TYPE) != velocity ]]; then printf '%s\n' "$s"; fi
-    done < <(list_servers)
 }
 
 # systemd EnvironmentFile için çift tırnaklı değer (\ " $ ` kaçışlanır).
@@ -607,12 +588,7 @@ main() {
     ((${#SERVERS[@]})) || die "Tanımlı sunucu yok ($CONFIG_DIR/servers/*/server.env)."
 
     if [[ ${EUID:-$(id -u)} -eq 0 ]]; then IS_ROOT=1; fi
-    if ((IS_ROOT)); then
-        { id -u "$MC_USER" && getent group "$MC_USER"; } >/dev/null 2>&1 \
-            || die "Kullanıcı/grup yok: $MC_USER — önce scripts/install.sh çalıştırın."
-        MC_GROUP=$(id -gn "$MC_USER")
-        command -v setpriv >/dev/null 2>&1 || require_cmd runuser
-    fi
+    if ((IS_ROOT)); then require_mc_user; fi # MC_GROUP'u da ayarlar
     if ((!DRY_RUN)); then
         [[ -d $MC_ROOT ]] || die "$MC_ROOT yok — önce scripts/install.sh çalıştırın."
         if ((!IS_ROOT)) && [[ -d $SERVERS_DIR && ! -w $SERVERS_DIR ]]; then

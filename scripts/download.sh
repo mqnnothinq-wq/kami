@@ -69,23 +69,7 @@ cleanup() {
     done
 }
 
-# --- Yetki ayrımı -------------------------------------------------------------
-# as_mc <komut...> — root iken komutu minecraft kimliğiyle (yetkisiz) çalıştırır; değilse olduğu gibi.
-# Sembolik bağ izlense bile yalnız minecraft'ın zaten erişebildiği dosyalara ulaşılır.
-as_mc() {
-    local uid gid
-    if [[ ${EUID:-$(id -u)} -eq 0 ]] && uid=$(id -u -- "$MC_USER" 2>/dev/null) && ((uid != 0)); then
-        gid=$(id -g -- "$MC_USER") || return 1
-        if command -v setpriv >/dev/null 2>&1; then
-            (cd / && setpriv --reuid="$uid" --regid="$gid" --init-groups -- "$@")
-        else
-            (cd / && runuser -u "$MC_USER" -- "$@")
-        fi
-    else
-        "$@"
-    fi
-}
-
+# --- Yetki ayrımı (as_mc: lib.sh) -----------------------------------------------
 # place_file <kaynak> <hedef> <mod> — hedefin dizininde geçici dosyaya yazar, sonra mv -T ile değiştirir.
 # rename, hedefteki sembolik bağın KENDİSİNİ değiştirir; bağın gösterdiği dosyaya yazılmaz.
 # shellcheck disable=SC2016  # betik minecraft kimliğiyle çalışan sh'de genişler
@@ -461,12 +445,6 @@ mc_hash_is() {
 looks_like_jar() { [[ -s $1 && $(head -c 2 -- "$1") == PK ]]; }
 looks_like_elf() { [[ -s $1 && $(head -c 4 -- "$1" | od -An -tx1 | tr -d ' \n') == 7f454c46 ]]; }
 
-server_running() {
-    [[ ${MC_NO_SYSTEMD:-0} == 1 ]] && return 1
-    command -v systemctl >/dev/null 2>&1 || return 1
-    is_running "$1"
-}
-
 # Sunucu en az bir kez çalıştı mı? (logs/latest.log ilk açılışta oluşur)
 server_started_before() { [[ -e $SERVERS_DIR/$1/logs/latest.log ]] || server_running "$1"; }
 
@@ -760,7 +738,7 @@ local_path() {
         return 1
     fi
     if [[ ! -f $real ]]; then
-        log_error "local: dosya yok: $p (LibreLogin için önce scripts/build-librelogin.sh çalıştırın)."
+        log_error "local: dosya yok: $p (LibreLogin için önce: sudo mc build-librelogin)."
         return 1
     fi
     printf '%s\n' "$real"
@@ -1053,6 +1031,8 @@ main() {
     [[ -n ${DOWNLOAD_USER_AGENT:-} ]] ||
         die "network.env: DOWNLOAD_USER_AGENT tanımsız (PaperMC tanımlayıcı User-Agent zorunlu tutar)."
     require_cmd curl jq sha256sum sha512sum tar od
+    # Root iken sunucu dizinlerindeki okuma/yazma minecraft kimliğiyle yapılır (as_mc).
+    if [[ ${EUID:-$(id -u)} -eq 0 ]]; then require_mc_user; fi
     targets_out=$(resolve_targets "$target")
     mapfile -t targets <<<"$targets_out"
 

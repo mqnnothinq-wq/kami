@@ -2,7 +2,7 @@
 # restic ile yedek alma, budama, listeleme ve geri yükleme.
 #
 # Kullanım (mc aracılığıyla):
-#   backup.sh [all|<sunucu>]            yedek al (all: tüm sunucular + MariaDB dökümü)
+#   backup.sh [all|<sunucu>]            yedek al (all: tüm sunucular + MariaDB dökümü + artifacts/)
 #   backup.sh list [<sunucu>]           anlık görüntüleri listele
 #   backup.sh prune                     BACKUP_KEEP_* ile eski yedekleri, LOG_RETENTION_DAYS ile eski günlükleri sil
 #   backup.sh restore <sunucu> <id>     geri yükle ("EVET" onayı ister; sunucuyu durdurur)
@@ -16,7 +16,8 @@ set -Eeuo pipefail
 RESTIC="${RESTIC:-restic}"
 RCON_RETRIES="${RCON_RETRIES:-5}"
 RCON_RETRY_SLEEP="${RCON_RETRY_SLEEP:-15}"
-DB_TAG="_mariadb" # sunucu adları "_" ile başlayamaz: çakışmaz
+DB_TAG="_mariadb"        # sunucu adları "_" ile başlayamaz: çakışmaz
+ARTIFACTS_TAG="_artifacts" # $MC_ROOT/artifacts: yerelde derlenen eklentiler (LibreLogin)
 # LibreLogin'in SQLite veritabanı (Velocity) ve yedek öncesi alınan tutarlı kopyası
 LL_DB_REL="plugins/librelogin/user-data.db"
 LL_SNAP_SUFFIX=".yedek"
@@ -26,7 +27,7 @@ declare -a SAVE_OFF=() # save-off verilmiş sunucular ("ad:port"); çıkışta s
 usage() {
     cat <<'EOF'
 Kullanım:
-  mc backup [sunucu|all]           yedek al (all: tüm sunucular + MariaDB dökümü)
+  mc backup [sunucu|all]           yedek al (all: tüm sunucular + MariaDB dökümü + artifacts/)
   mc backup list [sunucu]          anlık görüntüleri (snapshot) listele
   mc backup prune                  eski yedekleri (BACKUP_KEEP_*) ve eski günlükleri (LOG_RETENTION_DAYS) sil
   mc restore <sunucu> <snapshot>   geri yükle: sunucu durdurulur, mevcut dizin
@@ -43,6 +44,10 @@ Veritabanını geri yüklemek (elle):
   set -a; . /etc/minecraft/backup.env; set +a
   restic snapshots --tag _mariadb
   restic dump <snapshot> /mariadb.sql | mariadb
+
+Derlenmiş LibreLogin jar'ını (/opt/minecraft/artifacts) geri yüklemek (elle; yeniden derlemek
+aynı jar'ı vermeyebilir ve derleme depoları kapanmış olabilir):
+  restic restore latest --tag _artifacts --target /
 EOF
 }
 
@@ -61,22 +66,8 @@ load_backup_env() {
     require_cmd "$RESTIC"
 }
 
-# as_mc <komut...> — root iken komutu minecraft kimliğiyle çalıştırır. Sunucu dizinleri minecraft'ça
-# yazılabilir; oraya yazan/oradan silen işlemler root yetkisiyle sembolik bağ izlemesin diye.
-# (download.sh'deki ile aynı; lib.sh'e taşınması önerilir.)
-as_mc() {
-    local uid gid
-    if [[ ${EUID:-$(id -u)} -eq 0 ]] && uid=$(id -u -- "$MC_USER" 2>/dev/null) && ((uid != 0)); then
-        gid=$(id -g -- "$MC_USER") || return 1
-        if command -v setpriv >/dev/null 2>&1; then
-            (cd / && setpriv --reuid="$uid" --regid="$gid" --init-groups -- "$@")
-        else
-            (cd / && runuser -u "$MC_USER" -- "$@")
-        fi
-    else
-        "$@"
-    fi
-}
+# as_mc, server_running, backup_lock: lib.sh. Sunucu dizinlerine yazan/oradan silen işlemler
+# as_mc ile (minecraft kimliğiyle) yapılır: root yetkisiyle sembolik bağ izlenmesin diye.
 
 repo_is_local() { [[ ! $RESTIC_REPOSITORY =~ ^(s3|b2|sftp|rest|azure|gs|swift|rclone): ]]; }
 
@@ -126,17 +117,9 @@ require_repo() {
     fi
 }
 
-server_running() {
-    [[ ${MC_NO_SYSTEMD:-0} == 1 ]] && return 1
-    command -v systemctl >/dev/null 2>&1 || return 1
-    is_running "$1"
-}
-
+# Yedek/budama/geri yükleme ve mc countdown-restart aynı kilidi paylaşır (lib.sh backup_lock).
 take_lock() {
-    local fd
-    [[ -d $MC_ROOT ]] || return 0
-    exec {fd}>"$MC_ROOT/.backup.lock"
-    flock -w 3600 "$fd" || die "Başka bir yedek/budama işlemi sürüyor ($MC_ROOT/.backup.lock)."
+    backup_lock 3600 "Başka bir yedek/budama/geri yükleme işlemi sürüyor ($MC_ROOT/.backup.lock, 1 saat beklendi)."
 }
 
 # --- RCON -------------------------------------------------------------------
@@ -309,6 +292,21 @@ backup_mariadb() {
     log_ok "MariaDB yedeği tamam."
 }
 
+# $MC_ROOT/artifacts (root'a ait, küçük): yerelde derlenen eklenti jar'ları. Aynı commit'ten yeniden
+# derlemek bire bir aynı jar'ı vermeyebilir ve derleme depoları kapanabilir; bu yüzden saklanır.
+backup_artifacts() {
+    local dir=$MC_ROOT/artifacts rc=0
+    [[ -d $dir && ! -L $dir ]] || return 0
+    [[ -n $(find "$dir" -mindepth 1 -maxdepth 1 -print -quit) ]] || return 0
+    log_info "artifacts/ yedekleniyor ($dir)..."
+    "$RESTIC" backup "$dir" --host "$BACKUP_HOST" --tag "$ARTIFACTS_TAG" || rc=$?
+    if ((rc != 0 && rc != 3)); then
+        log_error "artifacts/ yedeklenemedi (restic çıkış $rc)."
+        return 1
+    fi
+    log_ok "artifacts/ yedeği tamam."
+}
+
 cmd_backup() {
     local target=${1:-all} out s fails=0
     local -a targets=()
@@ -328,6 +326,7 @@ cmd_backup() {
     done
     if [[ $target == all ]]; then
         backup_mariadb || fails=$((fails + 1))
+        backup_artifacts || fails=$((fails + 1))
     fi
     if ((fails > 0)); then
         log_error "Yedekleme $fails hatayla bitti."
@@ -383,7 +382,7 @@ cmd_list() {
     load_backup_env
     filt=(--host "$BACKUP_HOST")
     if [[ -n $srv && $srv != all ]]; then
-        server_exists "$srv" || [[ $srv == "$DB_TAG" ]] || die "Tanımsız sunucu: $srv"
+        server_exists "$srv" || [[ $srv == "$DB_TAG" || $srv == "$ARTIFACTS_TAG" ]] || die "Tanımsız sunucu: $srv"
         filt+=(--tag "$srv")
     fi
     require_repo
@@ -490,13 +489,15 @@ cmd_restore() {
     if [[ $type == velocity ]]; then promote_librelogin_db "$dir"; fi
 
     log_ok "$srv geri yüklendi (snapshot ${id:0:8}, $time)."
-    printf '\nBaşlatmak için:  mc start %s\n' "$srv"
+    printf '\nBaşlatmak için:  sudo mc start %s\n' "$srv"
     [[ -n ${aside:-} ]] && printf 'Eski dizin     :  %s  (kontrol ettikten sonra silebilirsiniz)\n' "$aside"
     if [[ $type == velocity ]] && [[ ! -f $dir/server.jar ]]; then
-        printf 'Not: jar dosyaları yedekte yok → önce: mc download all %s\n' "$srv"
+        printf 'Not: jar dosyaları yedekte yok → önce: sudo mc download all %s\n' "$srv"
+        printf '     LibreLogin, %s/artifacts/ içinden kopyalanır; orada yoksa önce:\n' "$MC_ROOT"
+        printf '     restic restore latest --tag %s --target /   (ya da: sudo mc build-librelogin)\n' "$ARTIFACTS_TAG"
     fi
     if [[ $type == limbo ]] && [[ ! -f $dir/pico_limbo ]]; then
-        printf 'Not: pico_limbo ikilisi yedekte yok → önce: mc download core %s\n' "$srv"
+        printf 'Not: pico_limbo ikilisi yedekte yok → önce: sudo mc download core %s\n' "$srv"
     fi
     return 0
 }
@@ -510,6 +511,8 @@ main() {
             ;;
     esac
     require_root
+    # Sunucu dizinlerine dokunan işlemler minecraft kimliğiyle yapılır (as_mc); listeleme dokunmaz.
+    [[ $cmd == list ]] || require_mc_user
     case $cmd in
         prune) cmd_prune ;;
         list) cmd_list "${2:-}" ;;

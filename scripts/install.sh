@@ -20,7 +20,10 @@ ADOPTIUM_FPR="3B04D753C9050D9A5D343F39843C48A565F8F04B" # beklenen parmak izi (k
 OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
 UNIT_DIR="/etc/systemd/system"
 SWAPFILE="/swapfile"
-APT_PACKAGES=(curl ca-certificates gnupg jq ufw fail2ban python3 python3-systemd restic zstd
+# git: build-librelogin.sh (LibreLogin kaynaktan derlenir). backup.sh'in LibreLogin SQLite kopyası
+# python3'ün standart sqlite3 modülüyle alınır (ayrı sqlite3 paketi gerekmez); mariadb-dump,
+# mariadb-server'ın bağımlılığı mariadb-client'tan gelir; flock/setpriv/runuser util-linux'tadır.
+APT_PACKAGES=(curl ca-certificates gnupg git jq ufw fail2ban python3 python3-systemd restic zstd
     mariadb-server sysstat unattended-upgrades)
 
 DRY_RUN=0
@@ -599,12 +602,15 @@ setup_systemd() {
     if ((changed)); then sysd daemon-reload; fi
     sysd enable --now mc-backup.timer mc-prune.timer mc-daily-restart.timer
 
+    # Sunucular config/servers/*/server.env'den (velocity, limbo, lobby, survival ve mc new-server
+    # ile eklenenler). Yalnız etkinleştirilir (açılışta başlar); ilk başlatma `mc init` ile yapılır.
     if [[ -d $CONFIG_DIR/servers ]]; then
         mapfile -t servers < <(list_servers)
     fi
-    ((${#servers[@]} > 0)) || servers=(velocity lobby survival)
+    if ((${#servers[@]} == 0)); then
+        log_warn "$CONFIG_DIR/servers/*/server.env bulunamadı: hiçbir mc@ birimi etkinleştirilmedi."
+    fi
     for s in "${servers[@]}"; do
-        # Yalnız etkinleştir (açılışta başlar); ilk başlatma `mc init` ile yapılır.
         sysd enable "$(unit_of "$s")"
     done
 }
@@ -674,14 +680,21 @@ EOF
 }
 
 final_message() {
+    local jdk_note=""
+    if [[ $JAVA_FLAVOR == openjdk ]]; then
+        jdk_note="
+     (--java=openjdk: Adoptium deposu kurulmadı; önce JDK 25 kurun: sudo apt-get install openjdk-25-jdk-headless)"
+    fi
     cat >&2 <<EOF
 
-${_C_GRN}Kurulum tamam.${_C_OFF} Sonraki adımlar:
-  1) Ayarları gözden geçirin: $CONFIG_DIR/network.env, $CONFIG_DIR/servers/*/server.env
-  2) mc download                      # Paper/Velocity + eklentiler (SHA doğrulamalı)
-  3) mc init all --accept-eula        # ilk açılış + config uygulama (Minecraft EULA'yı kabul edersiniz)
-  4) mc start all && mc status
-  5) mc doctor                        # sağlık denetimi (RAM, swap, steal, UFW, yedek...)
+${_C_GRN}Kurulum tamam.${_C_OFF} Sonraki adımlar (sırayla):
+  1) (isteğe bağlı) Ayarları gözden geçirin: $CONFIG_DIR/network.env, $CONFIG_DIR/servers/*/server.env,
+     $CONFIG_DIR/plugins.list
+  2) sudo mc build-librelogin         # LibreLogin jar'ı (giriş eklentisi) kaynaktan derlenir → $MC_ROOT/artifacts/${jdk_note}
+  3) sudo mc download all             # Paper/Velocity/PicoLimbo + eklentiler (SHA doğrulamalı)
+  4) sudo mc init all --accept-eula   # ilk açılış + config uygulama (Minecraft EULA'yı kabul edersiniz)
+  5) sudo mc start all                # ardından: mc status
+  6) sudo mc doctor                   # sağlık denetimi (RAM, swap, steal, UFW, yedek...)
 
 Yedek: saatlik yedek ve günlük budama zamanlayıcıları etkin.
   - $BACKUP_ENV_FILE içinde UZAK bir restic deposu tanımlayın (varsayılan yerel depo makine kaybına karşı korumaz).
