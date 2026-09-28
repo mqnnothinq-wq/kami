@@ -1,0 +1,3 @@
+chunk-system:
+  io-threads: -1
+  worker-threads: 2

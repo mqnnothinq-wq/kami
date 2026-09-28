@@ -1,0 +1,7 @@
+anticheat:
+  anti-xray:
+    enabled: true
+    engine-mode: 2
+    hidden-blocks:
+      - diamond_ore
+      - deepslate_diamond_ore

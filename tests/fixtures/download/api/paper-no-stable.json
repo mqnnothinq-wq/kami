@@ -1,0 +1,46 @@
+[
+  {
+    "id": 3,
+    "time": "2026-09-23T10:00:00.000Z",
+    "channel": "BETA",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000003",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 3\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.3-3.jar",
+        "checksums": {
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/paper-26.3-3.jar"
+      }
+    }
+  },
+  {
+    "id": 2,
+    "time": "2026-09-22T10:00:00.000Z",
+    "channel": "ALPHA",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000002",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 2\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.3-2.jar",
+        "checksums": {
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/paper-26.3-2.jar"
+      }
+    }
+  }
+]

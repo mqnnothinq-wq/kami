@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-20T00:00:00Z",
+  "name": "5.5.1",
+  "visibility": "public",
+  "description": "Sürüm notları",
+  "author": "ViaVersion",
+  "reviewState": "reviewed",
+  "channel": {
+    "name": "Release",
+    "color": "#14b8a6",
+    "flags": [
+      "PINNED"
+    ]
+  },
+  "pinnedStatus": "CHANNEL",
+  "downloads": {
+    "PAPER": {
+      "fileInfo": {
+        "name": "ViaBackwards-5.5.1.jar",
+        "sizeBytes": 100,
+        "sha256Hash": "1dff36dc2d7d58bfce84877546eca9157c8cd4db481129fe0dbf9eee9e60cd07"
+      },
+      "externalUrl": null,
+      "downloadUrl": "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.5.1/PAPER/ViaBackwards-5.5.1.jar"
+    }
+  },
+  "pluginDependencies": {
+    "PAPER": [
+      {
+        "name": "ViaVersion",
+        "required": true,
+        "externalUrl": null,
+        "platform": "PAPER"
+      }
+    ]
+  },
+  "platformDependencies": {
+    "PAPER": [
+      "1.8-26.3"
+    ]
+  },
+  "platformDependenciesFormatted": {
+    "PAPER": "1.8-26.3"
+  }
+}

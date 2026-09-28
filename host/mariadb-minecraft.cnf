@@ -1,0 +1,16 @@
+# Kurulum yeri: /etc/mysql/mariadb.conf.d/60-minecraft.cnf
+# Tek MariaDB örneği: LuckPerms (Velocity + tüm backend'ler) ve gerekirse giriş eklentisi.
+# Yalnız yerel erişim; JVM'lere yer bırakmak için küçük bellek bütçesi (~450 MB).
+# skip-name-resolve bilerek AÇILMAZ: 127.0.0.1 üzerinden gelen TCP bağlantısı 'localhost' hesabıyla
+# da eşleşebilsin (install.sh ayrıca 'minecraft'@'127.0.0.1' hesabını da açar).
+[mysqld]
+bind-address            = 127.0.0.1
+port                    = 3306
+local-infile            = 0
+
+character-set-server    = utf8mb4
+collation-server        = utf8mb4_unicode_ci
+
+innodb_buffer_pool_size = 384M
+max_connections         = 100
+performance_schema      = OFF

@@ -1,0 +1,6 @@
+# bukkit.yml — hedef yoksa olduğu gibi kopyalanır
+settings:
+  allow-end: false
+  connection-throttle: -1
+spawn-limits:
+  monsters: 0

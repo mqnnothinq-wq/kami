@@ -1,0 +1,26 @@
+{
+  "project_id": "geyser",
+  "project_name": "Geyser",
+  "version": "2.11.2",
+  "build": 1003,
+  "time": "2026-09-27T12:00:00.000Z",
+  "channel": "default",
+  "promoted": false,
+  "changes": [
+    {
+      "commit": "00000000000000000000000000000000000003eb",
+      "summary": "Değişiklik",
+      "message": "Değişiklik"
+    }
+  ],
+  "downloads": {
+    "spigot": {
+      "name": "Geyser-Spigot.jar",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "velocity": {
+      "name": "Geyser-Velocity.jar",
+      "sha256": "34af992cfde3144de2234b21dea8488bcaf98981eabf04f6d478b52a7af5f9d2"
+    }
+  }
+}

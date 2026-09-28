@@ -1,0 +1,3 @@
+# Velocity JVM bayrakları (test fikstürü)
+-XX:+UseG1GC
+-XX:G1HeapRegionSize=4M

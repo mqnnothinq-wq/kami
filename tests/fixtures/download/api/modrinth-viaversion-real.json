@@ -1,0 +1,179 @@
+[
+  {
+    "game_versions": [
+      "1.21.9",
+      "1.21.10",
+      "1.21.11"
+    ],
+    "loaders": [
+      "fabric",
+      "folia",
+      "paper",
+      "velocity"
+    ],
+    "id": "afD6vgmi",
+    "project_id": "P1OZGk5p",
+    "author_id": "t0xQradN",
+    "featured": false,
+    "name": "5.7.2-SNAPSHOT+906",
+    "version_number": "5.7.2-SNAPSHOT+906",
+    "changelog_url": null,
+    "date_published": "2026-01-21T16:20:23.027792Z",
+    "downloads": 2795,
+    "version_type": "beta",
+    "status": "listed",
+    "requested_status": null,
+    "files": [
+      {
+        "id": "8OEIDBnC",
+        "hashes": {
+          "sha1": "c72398b5078a4ff3f589ba831314b6587c03aa38",
+          "sha512": "6ff818d786eceee506465a1bc1769ef8d43bba8d7a449861eaf46c1a9de63979afea5400b8c4deeef59fce3868f7c246137b7cf97875eded0211600aca705c04"
+        },
+        "url": "https://cdn.modrinth.com/data/P1OZGk5p/versions/afD6vgmi/ViaVersion-5.7.2-SNAPSHOT.jar",
+        "filename": "ViaVersion-5.7.2-SNAPSHOT.jar",
+        "primary": true,
+        "size": 5991914,
+        "file_type": null
+      }
+    ],
+    "dependencies": [
+      {
+        "version_id": null,
+        "project_id": "NpvuJQoq",
+        "file_name": null,
+        "dependency_type": "optional"
+      },
+      {
+        "version_id": null,
+        "project_id": "YlKdE5VK",
+        "file_name": null,
+        "dependency_type": "optional"
+      },
+      {
+        "version_id": null,
+        "project_id": "TbHIxhx5",
+        "file_name": null,
+        "dependency_type": "optional"
+      }
+    ]
+  },
+  {
+    "game_versions": [
+      "1.21.9",
+      "1.21.10",
+      "1.21.11"
+    ],
+    "loaders": [
+      "fabric",
+      "folia",
+      "paper",
+      "velocity"
+    ],
+    "id": "99sdHAtp",
+    "project_id": "P1OZGk5p",
+    "author_id": "t0xQradN",
+    "featured": false,
+    "name": "5.7.2-SNAPSHOT+905",
+    "version_number": "5.7.2-SNAPSHOT+905",
+    "changelog_url": null,
+    "date_published": "2026-01-19T20:10:21.180763Z",
+    "downloads": 4773,
+    "version_type": "beta",
+    "status": "listed",
+    "requested_status": null,
+    "files": [
+      {
+        "id": "Pedmeds7",
+        "hashes": {
+          "sha1": "ead068ae10402e894b99aa18d142ab5efe73c929",
+          "sha512": "ae5d0d9c7ef17d1a8f1039fefc34860c2501b45c22ac7cedbf89087b12e2ca25c57d2ae7e29aeeb7e332186795156d13a8471e6b50e405d74e71ac38c9cba443"
+        },
+        "url": "https://cdn.modrinth.com/data/P1OZGk5p/versions/99sdHAtp/ViaVersion-5.7.2-SNAPSHOT.jar",
+        "filename": "ViaVersion-5.7.2-SNAPSHOT.jar",
+        "primary": true,
+        "size": 5991916,
+        "file_type": null
+      }
+    ],
+    "dependencies": [
+      {
+        "version_id": null,
+        "project_id": "TbHIxhx5",
+        "file_name": null,
+        "dependency_type": "optional"
+      },
+      {
+        "version_id": null,
+        "project_id": "NpvuJQoq",
+        "file_name": null,
+        "dependency_type": "optional"
+      },
+      {
+        "version_id": null,
+        "project_id": "YlKdE5VK",
+        "file_name": null,
+        "dependency_type": "optional"
+      }
+    ]
+  },
+  {
+    "game_versions": [
+      "1.21.9",
+      "1.21.10",
+      "1.21.11"
+    ],
+    "loaders": [
+      "fabric",
+      "folia",
+      "paper",
+      "velocity"
+    ],
+    "id": "UU6hYsGX",
+    "project_id": "P1OZGk5p",
+    "author_id": "t0xQradN",
+    "featured": false,
+    "name": "5.7.1",
+    "version_number": "5.7.1",
+    "changelog_url": null,
+    "date_published": "2026-01-18T15:08:09.905663Z",
+    "downloads": 8922,
+    "version_type": "release",
+    "status": "listed",
+    "requested_status": null,
+    "files": [
+      {
+        "id": "ZxMhbCa4",
+        "hashes": {
+          "sha1": "52c9445274acc430586cba563b9d7620eeeed551",
+          "sha512": "4571c710b59253ab05dd30beb9949ea7d7d058fc30185a030b45e141a74b83dafd264fdba30d597d24809f83d9bf3fc5c054c4c6c9da834db1e8e2accbec8273"
+        },
+        "url": "https://cdn.modrinth.com/data/P1OZGk5p/versions/UU6hYsGX/ViaVersion-5.7.1.jar",
+        "filename": "ViaVersion-5.7.1.jar",
+        "primary": true,
+        "size": 5991239,
+        "file_type": null
+      }
+    ],
+    "dependencies": [
+      {
+        "version_id": null,
+        "project_id": "TbHIxhx5",
+        "file_name": null,
+        "dependency_type": "optional"
+      },
+      {
+        "version_id": null,
+        "project_id": "YlKdE5VK",
+        "file_name": null,
+        "dependency_type": "optional"
+      },
+      {
+        "version_id": null,
+        "project_id": "NpvuJQoq",
+        "file_name": null,
+        "dependency_type": "optional"
+      }
+    ]
+  }
+]

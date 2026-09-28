@@ -1,0 +1,10 @@
+# Günlük yeniden başlatma: oyunculara geri sayım duyurur, sonra `mc restart all`.
+# Bekleyen jar/eklenti güncellemeleri bu sırada uygulanır (mc@.service ExecStartPre).
+[Unit]
+Description=Minecraft günlük yeniden başlatma (geri sayımlı)
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/mc countdown-restart 5
+TimeoutStartSec=30min

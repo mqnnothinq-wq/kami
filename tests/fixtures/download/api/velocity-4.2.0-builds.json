@@ -1,0 +1,46 @@
+[
+  {
+    "id": 520,
+    "time": "2026-09-27T10:00:00.000Z",
+    "channel": "STABLE",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000208",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 520\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "velocity-4.2.0-520.jar",
+        "checksums": {
+          "sha256": "a05a2e3a2cb4a5945eb7cd13c61d8432b8d133b50e00d20f1b55f1c8183b24f7"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/a05a2e3a2cb4a5945eb7cd13c61d8432b8d133b50e00d20f1b55f1c8183b24f7/velocity-4.2.0-520.jar"
+      }
+    }
+  },
+  {
+    "id": 519,
+    "time": "2026-09-26T10:00:00.000Z",
+    "channel": "STABLE",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000207",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 519\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "velocity-4.2.0-519.jar",
+        "checksums": {
+          "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/9999999999999999999999999999999999999999999999999999999999999999/velocity-4.2.0-519.jar"
+      }
+    }
+  }
+]

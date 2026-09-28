@@ -1,0 +1,90 @@
+[
+  {
+    "id": 18,
+    "time": "2026-09-20T10:00:00.000Z",
+    "channel": "ALPHA",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000012",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 18\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.2-18.jar",
+        "checksums": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/paper-26.2-18.jar"
+      }
+    }
+  },
+  {
+    "id": 17,
+    "time": "2026-09-28T10:00:00.000Z",
+    "channel": "BETA",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000011",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 17\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.2-17.jar",
+        "checksums": {
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/paper-26.2-17.jar"
+      }
+    }
+  },
+  {
+    "id": 16,
+    "time": "2026-09-27T10:00:00.000Z",
+    "channel": "STABLE",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000010",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 16\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.2-16.jar",
+        "checksums": {
+          "sha256": "0d75641f69139cbe4f86941a88b47704189440bebe91218c56571f034fc647f3"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/0d75641f69139cbe4f86941a88b47704189440bebe91218c56571f034fc647f3/paper-26.2-16.jar"
+      }
+    }
+  },
+  {
+    "id": 15,
+    "time": "2026-09-26T10:00:00.000Z",
+    "channel": "STABLE",
+    "commits": [
+      {
+        "sha": "000000000000000000000000000000000000000f",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 15\n"
+      }
+    ],
+    "downloads": {
+      "server:default": {
+        "name": "paper-26.2-15.jar",
+        "checksums": {
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/paper-26.2-15.jar"
+      }
+    }
+  }
+]

@@ -1,0 +1,2 @@
+# survival ilk açılış komutları (test fikstürü)
+gamerule minecraft:spawn_phantoms false

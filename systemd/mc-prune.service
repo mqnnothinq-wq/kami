@@ -1,0 +1,13 @@
+# Günlük bakım: restic eski anlık görüntüleri siler (BACKUP_KEEP_*),
+# sunucu günlüklerinden LOG_RETENTION_DAYS günden eski *.log.gz dosyalarını siler (KVKK).
+[Unit]
+Description=Minecraft yedek ve günlük budama
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/mc backup prune
+Nice=10
+IOSchedulingClass=idle

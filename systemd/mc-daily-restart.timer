@@ -1,0 +1,12 @@
+# Saat, sistem saat dilimine göredir (install.sh: Europe/Istanbul).
+# Kapatmak için: systemctl disable --now mc-daily-restart.timer
+[Unit]
+Description=Günlük Minecraft yeniden başlatma (05:00)
+
+[Timer]
+OnCalendar=*-*-* 05:00:00
+# Kaçırılan yeniden başlatma açılışta telafi EDİLMEZ (sunucular zaten yeni başlamıştır).
+Persistent=false
+
+[Install]
+WantedBy=timers.target

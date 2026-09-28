@@ -1,0 +1,13 @@
+# Sunucu konsolu için FIFO: `mc cmd <srv> ...` buraya yazar, java stdin'den okur.
+# Servisle birlikte başlar/durur (PartOf); durunca FIFO silinir.
+[Unit]
+Description=Minecraft konsol girişi (%i)
+PartOf=mc@%i.service
+
+[Socket]
+ListenFIFO=/run/minecraft/%i.stdin
+SocketUser=minecraft
+SocketGroup=minecraft
+SocketMode=0660
+DirectoryMode=0750
+RemoveOnStop=yes

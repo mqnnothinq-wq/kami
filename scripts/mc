@@ -1,0 +1,820 @@
+#!/usr/bin/env bash
+# kami — Minecraft ağı yönetim aracı (SPEC §5). /usr/local/bin/mc bu dosyaya sembolik bağdır.
+#
+# Test/ortam değişkenleri (lib.sh'dekilere ek olarak):
+#   MC_NO_SYSTEMD=1       mc init ilk açılışı (systemctl/journalctl) atlar
+#   MC_READY_TIMEOUT=600  mc init: hazır satırı için en uzun bekleme (sn)
+#   MC_RCON_WAIT=60       mc init: RCON'un açılması için en uzun bekleme (sn)
+#   MC_POLL_INTERVAL=2    bekleme döngülerinin aralığı (sn)
+#   MC_NO_SLEEP=1         countdown-restart beklemelerini atlar (yalnız test)
+#   MC_MEMINFO, MC_JAVA_BIN  doctor/new-server için /proc/meminfo ve /usr/bin/java yerine
+set -Eeuo pipefail
+# shellcheck source=SCRIPTDIR/lib.sh
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib.sh"
+
+MC_NO_SYSTEMD="${MC_NO_SYSTEMD:-0}"
+POLL="${MC_POLL_INTERVAL:-2}"
+MEMINFO_FILE="${MC_MEMINFO:-/proc/meminfo}"
+JAVA_BIN="${MC_JAVA_BIN:-/usr/bin/java}"
+EULA_URL="https://aka.ms/MinecraftEULA"
+
+usage() {
+    local servers
+    servers=$(list_servers 2>/dev/null | paste -sd' ' - || true)
+    cat <<EOF
+Kullanım: mc <komut> [argümanlar]
+
+Kurulum ve yapılandırma:
+  download [all|core|plugins] [sunucu]   Paper/Velocity ve eklentileri indirir
+  apply [--dry-run] [sunucu|all]         config/ ağacını sunuculara uygular
+  init <sunucu|all> --accept-eula        ilk kurulum: EULA, config, ilk açılış,
+                                         init-commands.txt, config'i yeniden uygula
+  new-server <ad> <port> <heap> [--from survival]
+                                         yeni backend sunucusu tanımlar
+
+Çalıştırma:
+  start [sunucu|all]      başlatır (all: önce backend'ler, sonra velocity)
+  stop [sunucu|all]       durdurur (all: önce velocity, sonra backend'ler)
+  restart [sunucu|all]    durdurup yeniden başlatır
+  status [sunucu|all]     durum tablosu: tür, port, durum, bellek (RSS), heap
+  log <sunucu> [...]      günlüğü canlı izler (journalctl -f; Ctrl+C ile çıkın)
+
+Konsol:
+  cmd <sunucu> <komut...>     konsola komut yazar (velocity dahil; yanıt: mc log)
+  rcon <sunucu> <komut...>    RCON ile çalıştırır ve yanıtı basar (yalnız paper)
+  say <mesaj...>              çalışan tüm backend'lere duyuru yapar
+  countdown-restart [dakika]  geri sayım duyurusu (varsayılan 5), sonra restart all
+
+Yedekleme:
+  backup [sunucu|all]         restic ile yedek alır
+  backup list                 yedekleri listeler
+  backup prune                saklama politikasına göre eski yedekleri siler
+  restore <sunucu> <snapshot> yedekten geri yükler
+
+Bakım:
+  doctor                      salt-okunur sağlık denetimi
+  help                        bu yardım
+
+<sunucu>: config/servers/ altındaki ad ya da 'all'. Tanımlı: ${servers:-(yok)}
+Ayrıntı: docs/09-komutlar.md
+EOF
+}
+
+# --- Yardımcılar -------------------------------------------------------------
+
+# Başka bir betiğe devreder (download.sh, backup.sh, apply-config.sh, new-server.sh).
+delegate() {
+    local script="$SCRIPTS_DIR/$1"
+    shift
+    [[ -f $script ]] || die "Bulunamadı: $script"
+    exec bash "$script" "$@"
+}
+
+list_proxies() {
+    local s
+    while IFS= read -r s; do
+        if [[ $(server_get "$s" TYPE) == velocity ]]; then printf '%s\n' "$s"; fi
+    done < <(list_servers)
+}
+
+need_server() { # <ad> — tek, tanımlı bir sunucu adı ister ('all' değil)
+    [[ -n ${1:-} ]] || die "Sunucu adı gerekli."
+    [[ $1 != all ]] || die "Bu komut 'all' kabul etmez; bir sunucu adı verin."
+    server_exists "$1" || die "Tanımsız sunucu: $1 (mevcut: $(list_servers | paste -sd' ' -))"
+}
+
+# Hedefi doğrular ve sunucu listesini yazdırır. Sıra: backends|proxies|as-is
+targets_in_order() { # <hedef> <start|stop>
+    local t=$1 order=$2
+    if [[ $t != all ]]; then
+        need_server "$t"
+        printf '%s\n' "$t"
+    elif [[ $order == start ]]; then
+        list_backends || true
+        list_proxies
+    else
+        list_proxies
+        list_backends || true
+    fi
+}
+
+# systemctl <eylem> birim... — aynı gruptaki birimler tek çağrıda (paralel) işlenir.
+units_do() {
+    local action=$1 s units=()
+    shift
+    for s in "$@"; do
+        [[ -z $s ]] || units+=("$(unit_of "$s")")
+    done
+    ((${#units[@]})) || return 0
+    log_info "systemctl $action ${units[*]}"
+    systemctl "$action" "${units[@]}"
+}
+
+one_target_arg() {
+    (($# <= 1)) || die "Fazla argüman: $* (tek sunucu adı ya da 'all')."
+    printf '%s' "${1:-all}"
+}
+
+fmt_bytes() {
+    local b=$1
+    if [[ $b =~ ^[0-9]+$ ]] && ((${#b} < 19)); then
+        awk -v b="$b" 'BEGIN { if (b >= 1073741824) printf "%.1fG", b / 1073741824; else printf "%.0fM", b / 1048576 }'
+    else
+        printf '%s' "-"
+    fi
+}
+
+fmt_mib() {
+    awk -v m="$1" 'BEGIN { if (m >= 1024) printf "%.1f GiB", m / 1024; else printf "%d MiB", m }'
+}
+
+heap_to_mib() {
+    local v=${1^^} n
+    [[ $v =~ ^([0-9]+)([KMG]?)$ ]] || return 1
+    n=${BASH_REMATCH[1]}
+    case ${BASH_REMATCH[2]} in
+        G) echo $((n * 1024)) ;;
+        M) echo "$n" ;;
+        K) echo $((n / 1024)) ;;
+        *) echo $((n / 1048576)) ;;
+    esac
+}
+
+nap() {
+    [[ ${MC_NO_SLEEP:-0} == 1 ]] || sleep "$1"
+}
+
+# --- RCON --------------------------------------------------------------------
+
+SECRETS_LOADED=0
+rcon_exec() { # <sunucu> <komut> — yanıtı stdout'a basar, rcon.py çıkış kodunu döndürür
+    local s=$1 command=$2 type port
+    need_server "$s"
+    type=$(server_get "$s" TYPE)
+    [[ $type == paper ]] || die "RCON yalnız paper sunucularında var ($s: $type). Konsol için: mc cmd $s <komut>"
+    port=$(server_get "$s" RCON_PORT)
+    [[ $port =~ ^[0-9]+$ ]] || die "$s: RCON_PORT tanımsız ya da geçersiz ('$port')."
+    if ((!SECRETS_LOADED)); then
+        load_secrets
+        SECRETS_LOADED=1
+    fi
+    [[ -n ${RCON_PASSWORD:-} ]] || die "RCON_PASSWORD $SECRETS_FILE içinde tanımlı değil."
+    RCON_PASSWORD="$RCON_PASSWORD" python3 "$SCRIPTS_DIR/rcon.py" -p "$port" "$command"
+}
+
+# Çalışan tüm backend'lere 'say' gönderir; hata olursa uyarır ama durmaz.
+broadcast() {
+    local msg=$1 s n=0
+    while IFS= read -r s; do
+        [[ -n $s ]] || continue
+        is_running "$s" || continue
+        if rcon_exec "$s" "say $msg" >/dev/null; then
+            n=$((n + 1))
+        else
+            log_warn "$s: duyuru gönderilemedi."
+        fi
+    done < <(list_backends || true)
+    if ((n == 0)); then log_warn "Duyuru hiçbir sunucuya ulaşmadı (çalışan backend yok?)."; fi
+    return 0
+}
+
+# --- Alt komutlar ------------------------------------------------------------
+
+cmd_start() {
+    local t b p
+    t=$(one_target_arg "$@")
+    if [[ $t == all ]]; then
+        b=$(list_backends || true)
+        p=$(list_proxies)
+        [[ -n $b$p ]] || die "Tanımlı sunucu yok."
+        require_root
+        mapfile -t b <<<"$b"
+        mapfile -t p <<<"$p"
+        units_do start "${b[@]}"
+        units_do start "${p[@]}"
+    else
+        need_server "$t"
+        require_root
+        units_do start "$t"
+    fi
+    log_ok "Başlatıldı. Hazır olduğunu görmek için: mc status / mc log <sunucu>"
+}
+
+cmd_stop() {
+    local t b p
+    t=$(one_target_arg "$@")
+    if [[ $t == all ]]; then
+        b=$(list_backends || true)
+        p=$(list_proxies)
+        require_root
+        mapfile -t b <<<"$b"
+        mapfile -t p <<<"$p"
+        units_do stop "${p[@]}"
+        units_do stop "${b[@]}"
+    else
+        need_server "$t"
+        require_root
+        units_do stop "$t"
+    fi
+    log_ok "Durduruldu."
+}
+
+cmd_restart() {
+    local t
+    t=$(one_target_arg "$@")
+    cmd_stop "$t"
+    cmd_start "$t"
+}
+
+cmd_status() {
+    local t list s type port heap props state sub mem
+    t=$(one_target_arg "$@")
+    list=$(targets_in_order "$t" stop)
+    printf '%-14s %-9s %-6s %-24s %8s %7s\n' SUNUCU TUR PORT DURUM RSS HEAP
+    while IFS= read -r s; do
+        [[ -n $s ]] || continue
+        type=$(server_get "$s" TYPE)
+        port=$(server_get "$s" PORT)
+        heap=$(server_get "$s" HEAP)
+        props=$(systemctl show -p ActiveState -p SubState -p MemoryCurrent "$(unit_of "$s")" 2>/dev/null || true)
+        state=$(sed -n 's/^ActiveState=//p' <<<"$props")
+        sub=$(sed -n 's/^SubState=//p' <<<"$props")
+        mem=$(sed -n 's/^MemoryCurrent=//p' <<<"$props")
+        [[ -n $state ]] || state="bilinmiyor"
+        [[ -z $sub ]] || state+=" ($sub)"
+        printf '%-14s %-9s %-6s %-24s %8s %7s\n' "$s" "${type:--}" "${port:--}" "$state" "$(fmt_bytes "$mem")" "${heap:--}"
+    done <<<"$list"
+}
+
+cmd_log() {
+    local s=${1:-}
+    [[ -n $s ]] || die "Kullanım: mc log <sunucu> [journalctl seçenekleri]"
+    shift
+    need_server "$s"
+    exec journalctl -u "$(unit_of "$s")" -f -o cat "$@"
+}
+
+cmd_cmd() {
+    (($# >= 2)) || die "Kullanım: mc cmd <sunucu> <komut...>"
+    local s=$1 line fifo
+    shift
+    need_server "$s"
+    line="$*"
+    [[ $line != *$'\n'* ]] || die "Komut satır sonu içeremez."
+    fifo="$MC_RUN_DIR/$s.stdin"
+    [[ -e $fifo ]] || die "Konsol girişi yok: $fifo — sunucu çalışıyor mu? (mc start $s)"
+    [[ -w $fifo ]] || die "Yazma izni yok: $fifo (root ya da '$MC_USER' grubu gerekir)."
+    # Okuyanı olmayan bir FIFO'da open() sonsuza dek bekler; zaman aşımıyla koru.
+    # shellcheck disable=SC2016  # $1/$2 iç kabukta genişler
+    timeout 10 bash -c 'printf "%s\n" "$1" > "$2"' _ "$line" "$fifo" \
+        || die "$fifo yazılamadı (okuyan yok mu? systemctl status mc@$s.socket)."
+    log_ok "$s konsoluna gönderildi: $line (yanıt için: mc log $s)"
+}
+
+cmd_rcon() {
+    (($# >= 2)) || die "Kullanım: mc rcon <sunucu> <komut...>"
+    local s=$1
+    shift
+    rcon_exec "$s" "$*"
+}
+
+cmd_say() {
+    (($# >= 1)) || die "Kullanım: mc say <mesaj...>"
+    broadcast "$*"
+}
+
+cmd_countdown_restart() {
+    local min=${1:-5} s any=0
+    (($# <= 1)) || die "Kullanım: mc countdown-restart [dakika]"
+    [[ $min =~ ^[1-9][0-9]*$ ]] || die "Geçersiz dakika: '$min' (pozitif tamsayı)."
+    require_root
+    while IFS= read -r s; do
+        if [[ -n $s ]] && is_running "$s"; then any=1; fi
+    done < <(list_servers)
+    if ((!any)); then
+        log_warn "Hiçbir sunucu çalışmıyor; yeniden başlatma atlandı (bakımda olabilir)."
+        return 0
+    fi
+    log_info "Geri sayım başladı: $min dakika."
+    broadcast "Sunucu $min dakika içinde yeniden başlatılacak."
+    if ((min > 1)); then
+        nap $(((min - 1) * 60))
+        broadcast "Sunucu 1 dakika içinde yeniden başlatılacak."
+    fi
+    nap 30
+    broadcast "Sunucu 30 saniye içinde yeniden başlatılacak."
+    nap 20
+    broadcast "Sunucu 10 saniye içinde yeniden başlatılacak. Görüşmek üzere!"
+    nap 10
+    cmd_restart all
+}
+
+# --- mc init (SPEC §8) -------------------------------------------------------
+
+INIT_FAILED=()
+
+own_path() {
+    chown "$MC_USER:$MC_USER" "$@"
+}
+
+ensure_server_dir() {
+    local d="$SERVERS_DIR/$1"
+    [[ -d $d ]] && return 0
+    if [[ ! -d $SERVERS_DIR ]]; then
+        mkdir -p "$MC_ROOT"
+        mkdir -m 0750 "$SERVERS_DIR"
+        own_path "$SERVERS_DIR"
+    fi
+    mkdir -m 0750 "$d"
+    own_path "$d"
+    log_info "Oluşturuldu: $d"
+}
+
+write_eula() {
+    local f="$SERVERS_DIR/$1/eula.txt"
+    if [[ -f $f ]] && grep -qx 'eula=true' "$f"; then return 0; fi
+    printf '# %s tarihinde "mc init --accept-eula" ile kabul edildi: %s\neula=true\n' \
+        "$(date '+%Y-%m-%d %H:%M')" "$EULA_URL" >"$f"
+    chmod 0640 "$f"
+    own_path "$f"
+    log_info "$1: eula.txt yazıldı (eula=true)."
+}
+
+# Günlükte hazır satırı var mı? (Paper: Done (…)! For help, type "help"; Velocity: Done (…)!)
+log_has_ready() { # <tür> <günlük metni>
+    if [[ $1 == paper ]]; then
+        awk 'index($0, "Done (") && index($0, "For help, type \"help\"") { f = 1 } END { exit !f }' <<<"$2"
+    else
+        awk 'index($0, "Done (") { f = 1 } END { exit !f }' <<<"$2"
+    fi
+}
+
+wait_ready() { # <sunucu> <tür> <başlangıç zamanı>
+    local s=$1 type=$2 since=$3 unit out state sub deadline
+    unit=$(unit_of "$s")
+    deadline=$((SECONDS + ${MC_READY_TIMEOUT:-600}))
+    log_info "$s: hazır olması bekleniyor (en çok ${MC_READY_TIMEOUT:-600} sn)…"
+    while :; do
+        out=$(journalctl -u "$unit" --since "$since" -o cat --no-pager -q 2>/dev/null || true)
+        if log_has_ready "$type" "$out"; then
+            log_ok "$s hazır."
+            return 0
+        fi
+        state=$(systemctl show -p ActiveState --value "$unit" 2>/dev/null || true)
+        sub=$(systemctl show -p SubState --value "$unit" 2>/dev/null || true)
+        if [[ $state == failed || $state == inactive || $sub == auto-restart ]]; then
+            log_error "$s başlatılamadı ya da kapandı (durum: $state/$sub). Son günlük satırları:"
+            tail -n 30 <<<"$out" >&2
+            return 1
+        fi
+        if ((SECONDS >= deadline)); then
+            log_error "$s: zaman aşımı — hazır satırı gelmedi. Son günlük satırları:"
+            tail -n 30 <<<"$out" >&2
+            return 1
+        fi
+        sleep "$POLL"
+    done
+}
+
+wait_rcon() { # <sunucu> — RCON dinleyicisi "Done"dan biraz sonra açılabilir
+    local s=$1 rc err deadline
+    deadline=$((SECONDS + ${MC_RCON_WAIT:-60}))
+    while :; do
+        rc=0
+        err=$(rcon_exec "$s" list 2>&1 >/dev/null) || rc=$?
+        case $rc in
+            0) return 0 ;;
+            2)
+                log_error "$s: RCON şifresi reddedildi — server.properties rcon.password ile secrets.env RCON_PASSWORD aynı mı? ($err)"
+                return 1
+                ;;
+        esac
+        if ((SECONDS >= deadline)); then
+            log_error "$s: RCON'a bağlanılamadı: $err"
+            return 1
+        fi
+        sleep "$POLL"
+    done
+}
+
+run_init_commands() { # <sunucu>
+    local s=$1 f line out fail=0 n=0
+    f="$CONFIG_DIR/servers/$s/init-commands.txt"
+    if [[ ! -f $f ]]; then
+        log_info "$s: init-commands.txt yok; atlanıyor."
+        return 0
+    fi
+    wait_rcon "$s" || return 1
+    while IFS= read -r -u 3 line || [[ -n $line ]]; do
+        line=${line%$'\r'}
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [[ -n $line && $line != \#* ]] || continue
+        line=${line#/}
+        log_info "RCON $s> $line"
+        if out=$(rcon_exec "$s" "$line" 2>&1); then
+            n=$((n + 1))
+            [[ -z $out ]] || printf '    %s\n' "$out"
+        else
+            fail=$((fail + 1))
+            log_warn "$s: komut başarısız: $line — $out"
+        fi
+    done 3<"$f"
+    log_info "$s: $n init komutu çalıştı, $fail başarısız."
+    ((fail == 0))
+}
+
+init_one() {
+    local s=$1 type unit since
+    type=$(server_get "$s" TYPE)
+    unit=$(unit_of "$s")
+    log_info "=== $s ($type): ilk kurulum ==="
+    if [[ $type == paper ]]; then write_eula "$s"; fi
+    bash "$SCRIPTS_DIR/apply-config.sh" "$s"
+
+    if [[ $MC_NO_SYSTEMD == 1 ]]; then
+        log_warn "MC_NO_SYSTEMD=1: ilk açılış, init komutları ve ikinci apply atlandı."
+        return 0
+    fi
+
+    since=$(date '+%Y-%m-%d %H:%M:%S')
+    units_do start "$s"
+    if ! wait_ready "$s" "$type" "$since"; then
+        systemctl stop "$unit" || true
+        die "$s: ilk açılış başarısız. Tüm günlük: journalctl -u $unit --since '$since'"
+    fi
+    if [[ $type == paper ]] && ! run_init_commands "$s"; then
+        INIT_FAILED+=("$s")
+    fi
+    units_do stop "$s"
+    # İlk açılışta eklentiler config üretti; şimdi onların override'ları da uygulanır.
+    bash "$SCRIPTS_DIR/apply-config.sh" "$s"
+    log_ok "$s: ilk kurulum tamamlandı."
+}
+
+cmd_init() {
+    local target="" eula=0 a s list
+    for a in "$@"; do
+        case $a in
+            --accept-eula) eula=1 ;;
+            -*) die "Bilinmeyen seçenek: $a (kullanım: mc init <sunucu|all> --accept-eula)" ;;
+            *)
+                [[ -z $target ]] || die "Fazla argüman: $a"
+                target=$a
+                ;;
+        esac
+    done
+    [[ -n $target ]] || die "Kullanım: mc init <sunucu|all> --accept-eula"
+    list=$(targets_in_order "$target" start)
+    [[ -n $list ]] || die "Tanımlı sunucu yok."
+
+    if ((!eula)); then
+        log_error "Minecraft sunucusu çalıştırmak için Minecraft EULA'sını kabul etmelisiniz."
+        printf 'EULA: %s\nOkuyup kabul ediyorsanız: mc init %s --accept-eula\n' "$EULA_URL" "$target" >&2
+        exit 1
+    fi
+    require_root
+    { id -u "$MC_USER" && getent group "$MC_USER"; } >/dev/null 2>&1 \
+        || die "Kullanıcı/grup yok: $MC_USER — önce scripts/install.sh çalıştırın."
+
+    # Ön denetim: hiçbir sunucuya dokunmadan önce hepsinin jar'ı hazır ve kapalı olmalı.
+    while IFS= read -r s; do
+        ensure_server_dir "$s"
+        [[ -f $SERVERS_DIR/$s/server.jar ]] \
+            || die "$s: $SERVERS_DIR/$s/server.jar yok — önce 'mc download' çalıştırın."
+        if [[ $MC_NO_SYSTEMD != 1 ]] && is_running "$s"; then
+            die "$s çalışıyor — önce 'mc stop $s'."
+        fi
+    done <<<"$list"
+
+    while IFS= read -r s; do
+        init_one "$s"
+    done <<<"$list"
+
+    if ((${#INIT_FAILED[@]})); then
+        log_error "Bazı init komutları başarısız oldu: ${INIT_FAILED[*]} — günlüğü inceleyip 'mc rcon <sunucu> <komut>' ile tamamlayın."
+        exit 1
+    fi
+    log_ok "İlk kurulum bitti. Sonraki adım: sudo mc start $target"
+}
+
+# --- mc doctor (SPEC §10) ----------------------------------------------------
+
+DOC_WARN=0 DOC_CRIT=0
+DOC_SKIPPED=()
+if [[ -t 1 ]]; then
+    _D_OK=$'\e[32m' _D_WARN=$'\e[33m' _D_CRIT=$'\e[31m' _D_OFF=$'\e[0m'
+else
+    _D_OK='' _D_WARN='' _D_CRIT='' _D_OFF=''
+fi
+d_ok() { printf '%s[TAMAM]%s %s\n' "$_D_OK" "$_D_OFF" "$*"; }
+d_warn() {
+    printf '%s[UYARI]%s %s\n' "$_D_WARN" "$_D_OFF" "$*"
+    DOC_WARN=$((DOC_WARN + 1))
+}
+d_crit() {
+    printf '%s[KRİTİK]%s %s\n' "$_D_CRIT" "$_D_OFF" "$*"
+    DOC_CRIT=$((DOC_CRIT + 1))
+}
+d_skip() { DOC_SKIPPED+=("$1"); }
+
+doctor_java() {
+    local bin=$JAVA_BIN props ver major pj s d
+    if [[ ! -x $bin ]]; then
+        d_crit "$bin yok — Java 25 kurun (scripts/install.sh)."
+        return 0
+    fi
+    props=$("$bin" -XshowSettings:properties -version 2>&1) || true
+    ver=$(awk -F' = ' '/^[ \t]*java\.version = / { print $2; exit }' <<<"$props")
+    major=${ver%%[.+-]*}
+    if [[ ! $major =~ ^[0-9]+$ ]]; then
+        d_crit "$bin sürümü okunamadı."
+    elif [[ $ver == *-* ]]; then
+        d_crit "Java $ver bir erken erişim (EA) sürümü: Paper '-' içeren java.version ile açılmaz — temurin-25-jre kurun."
+    elif ((major < 25)); then
+        d_crit "$bin → Java $ver; en az 25 gerekli (update-alternatives --config java)."
+    else
+        d_ok "Java $ver ($bin → $(readlink -f "$bin"))"
+    fi
+    pj=$(command -v java || true)
+    if [[ -n $pj && $(readlink -f "$pj") != "$(readlink -f "$bin")" ]]; then
+        d_warn "PATH'teki java ($pj) $bin ile aynı değil; systemd $bin kullanır."
+    fi
+    while IFS= read -r s; do
+        d="$SERVERS_DIR/$s"
+        if [[ $d == *'!'* || $d == *'+'* ]]; then
+            d_crit "$d yolunda '!' ya da '+' var — Paper bu dizinde açılmaz."
+        fi
+    done < <(list_servers)
+}
+
+doctor_memory() {
+    local mem_kb swap_kb s h mib total=0 n=0 need mem max_s="" max_h=0 cut
+    mem_kb=$(awk '$1 == "MemTotal:" { print $2 }' "$MEMINFO_FILE" 2>/dev/null || true)
+    swap_kb=$(awk '$1 == "SwapTotal:" { print $2 }' "$MEMINFO_FILE" 2>/dev/null || true)
+    if [[ ! $mem_kb =~ ^[0-9]+$ ]]; then
+        d_warn "MemTotal okunamadı ($MEMINFO_FILE)."
+    else
+        while IFS= read -r s; do
+            h=$(server_get "$s" HEAP)
+            if ! mib=$(heap_to_mib "$h"); then
+                d_warn "$s: HEAP='$h' anlaşılamadı."
+                continue
+            fi
+            total=$((total + mib))
+            n=$((n + 1))
+            if ((mib > max_h)); then
+                max_h=$mib
+                max_s=$s
+            fi
+        done < <(list_servers)
+        need=$((total * 125 / 100 + 1536))
+        mem=$((mem_kb / 1024))
+        if ((need > mem)); then
+            # Açığı kapatmak için en büyük heap'ten düşülecek miktar (256 MiB'e yuvarlanır).
+            cut=$((((need - mem) * 100 / 125 + 255) / 256 * 256))
+            d_warn "RAM yetersiz olabilir: $n JVM, toplam heap $(fmt_mib "$total") → tahmini gereksinim $(fmt_mib "$need") (heap + JVM başına %25 ek yük + 1.5 GB OS), MemTotal $(fmt_mib "$mem"). Öneri: $max_s HEAP'ini en az $(fmt_mib "$cut") düşürün (≈$((max_h - cut))M) ya da RAM'i artırın."
+        else
+            d_ok "RAM: toplam heap $(fmt_mib "$total"), tahmini gereksinim $(fmt_mib "$need") ≤ MemTotal $(fmt_mib "$mem")."
+        fi
+    fi
+    if [[ $swap_kb =~ ^[0-9]+$ ]] && ((swap_kb > 0)); then
+        d_ok "Swap var: $(fmt_mib $((swap_kb / 1024))) (güvenlik ağı; vm.swappiness=1 önerilir)."
+    else
+        d_warn "Swap yok: OOM öldürücüye karşı 2 GB swapfile önerilir (vm.swappiness=1)."
+    fi
+}
+
+doctor_steal() {
+    local out st
+    if ! command -v vmstat >/dev/null 2>&1; then
+        d_skip "CPU steal (vmstat yok)"
+        return 0
+    fi
+    out=$(vmstat 1 5 2>/dev/null) || true
+    # İlk örnek açılıştan beri ortalamadır; son 4 örneğin ortalaması alınır.
+    st=$(awk 'NR == 2 { for (i = 1; i <= NF; i++) if ($i == "st") c = i; next }
+              NR > 3 && c { s += $c; n++ }
+              END { if (n) printf "%.1f", s / n }' <<<"$out")
+    if [[ -z $st ]]; then
+        d_skip "CPU steal (vmstat çıktısı okunamadı)"
+    elif awk -v s="$st" 'BEGIN { exit !(s > 5) }'; then
+        d_crit "CPU steal ortalama %$st (> %5): sanal makine CPU'yu başkalarıyla paylaşıyor — sağlayıcıyla görüşün ya da planı değiştirin."
+    elif awk -v s="$st" 'BEGIN { exit !(s > 2) }'; then
+        d_warn "CPU steal ortalama %$st (> %2): TPS düşüşleri görülebilir; izlemeye devam edin."
+    else
+        d_ok "CPU steal ortalama %$st."
+    fi
+}
+
+doctor_secrets() {
+    local mode owner
+    if [[ -d $MC_ETC && ! -x $MC_ETC ]]; then
+        d_skip "secrets.env izinleri (root gerekir)"
+        return 0
+    fi
+    if [[ ! -e $SECRETS_FILE ]]; then
+        d_crit "$SECRETS_FILE yok — scripts/install.sh üretir."
+        return 0
+    fi
+    mode=$(stat -c '%a' "$SECRETS_FILE")
+    owner=$(stat -c '%U' "$SECRETS_FILE")
+    if [[ ($mode == 600 || $mode == 400) && $owner == root ]]; then
+        d_ok "$SECRETS_FILE izinleri $mode ($owner)."
+    else
+        d_crit "$SECRETS_FILE izinleri $mode ($owner) — olmalı: 0600 root (chmod 600; chown root:root)."
+    fi
+}
+
+doctor_ufw() {
+    local out spec
+    if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+        d_skip "UFW (root gerekir)"
+        return 0
+    fi
+    if ! command -v ufw >/dev/null 2>&1; then
+        d_crit "ufw kurulu değil — güvenlik duvarı yok (scripts/install.sh)."
+        return 0
+    fi
+    out=$(ufw status 2>&1) || true
+    if ! grep -q '^Status: active' <<<"$out"; then
+        d_crit "UFW etkin değil (ufw enable)."
+        return 0
+    fi
+    d_ok "UFW etkin."
+    for spec in "${PUBLIC_JAVA_PORT:-25565}/tcp" "${PUBLIC_BEDROCK_PORT:-19132}/udp"; do
+        if awk -v s="$spec" -v p="${spec%/*}" '($1 == s || $1 == p) && $2 ~ /^(ALLOW|LIMIT)/ { f = 1 } END { exit !f }' <<<"$out"; then
+            d_ok "UFW: $spec açık."
+        else
+            d_crit "UFW: $spec açık değil (ufw allow $spec)."
+        fi
+    done
+}
+
+doctor_ports() {
+    local out s p addrs a bad
+    if ! command -v ss >/dev/null 2>&1; then
+        d_skip "dinlenen portlar (ss yok)"
+        return 0
+    fi
+    out=$(ss -ltn 2>/dev/null) || true
+    while IFS= read -r s; do
+        [[ -n $s ]] || continue
+        for p in "$(server_get "$s" PORT)" "$(server_get "$s" RCON_PORT)"; do
+            [[ $p =~ ^[0-9]+$ ]] || continue
+            addrs=$(awk -v p="$p" 'NR > 1 { a = $4; i = length(a); while (i > 0 && substr(a, i, 1) != ":") i--; if (substr(a, i + 1) == p) print substr(a, 1, i - 1) }' <<<"$out")
+            if [[ -z $addrs ]]; then
+                d_ok "$s: $p dinlenmiyor (sunucu kapalı olabilir)."
+                continue
+            fi
+            bad=""
+            while IFS= read -r a; do
+                a=${a%%%*}
+                case $a in
+                    127.* | '[::1]' | '[::ffff:127.'*) ;;
+                    *) bad+=" $a" ;;
+                esac
+            done <<<"$addrs"
+            if [[ -n $bad ]]; then
+                d_crit "$s: $p dış arayüzde dinleniyor ($bad ) — server-ip=127.0.0.1 ve rcon.ip=127.0.0.1 olmalı."
+            else
+                d_ok "$s: $p yalnız 127.0.0.1'de."
+            fi
+        done
+    done < <(list_backends || true)
+}
+
+doctor_disk() {
+    local path=$MC_ROOT out pct
+    [[ -d $path ]] || path=/
+    out=$(df -P "$path" 2>/dev/null) || true
+    pct=$(awk 'NR == 2 { gsub("%", "", $5); print $5 }' <<<"$out")
+    if [[ ! $pct =~ ^[0-9]+$ ]]; then
+        d_skip "disk kullanımı (df okunamadı)"
+    elif ((pct > 90)); then
+        d_crit "Disk %$pct dolu ($path) — dünyalar ve yedekler yazılamayabilir."
+    elif ((pct > 70)); then
+        d_warn "Disk %$pct dolu ($path) — eski yedekleri/günlükleri temizleyin (mc backup prune)."
+    else
+        d_ok "Disk kullanımı %$pct ($path)."
+    fi
+}
+
+doctor_backup() {
+    local repo json age
+    if [[ ! -e $BACKUP_ENV_FILE ]]; then
+        if [[ -d $MC_ETC && ! -x $MC_ETC ]]; then
+            d_skip "yedek deposu (root gerekir)"
+        else
+            d_warn "$BACKUP_ENV_FILE yok — yedekleme yapılandırılmamış (scripts/install.sh)."
+        fi
+        return 0
+    fi
+    if [[ ! -r $BACKUP_ENV_FILE ]]; then
+        d_skip "yedek deposu (root gerekir)"
+        return 0
+    fi
+    # shellcheck disable=SC1090  # çalışma zamanında belirlenen dosya
+    repo=$(set -a && . "$BACKUP_ENV_FILE" && printf '%s' "${RESTIC_REPOSITORY:-}")
+    case $repo in
+        "") d_warn "RESTIC_REPOSITORY tanımsız ($BACKUP_ENV_FILE)." ;;
+        /* | local:*) d_warn "Yedek deposu yerel ($repo): disk/makine kaybına karşı korumaz — uzak depo (S3/B2/SFTP) ekleyin." ;;
+        *) d_ok "Yedek deposu uzak (${repo%%:*})." ;;
+    esac
+    if ! command -v restic >/dev/null 2>&1; then
+        d_crit "restic kurulu değil — yedek alınamaz."
+        return 0
+    fi
+    # shellcheck disable=SC1090
+    if ! json=$(set -a && . "$BACKUP_ENV_FILE" && set +a && timeout 120 restic snapshots --latest 1 --json --no-lock 2>/dev/null); then
+        d_crit "restic snapshots çalışmadı (depoya erişilemiyor ya da şifre yanlış)."
+        return 0
+    fi
+    age=$(python3 -c '
+import datetime, json, re, sys
+best = None
+for s in json.load(sys.stdin) or []:
+    m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)?", s.get("time", ""))
+    if not m:
+        continue
+    tz = m.group(2) or "Z"
+    t = datetime.datetime.fromisoformat(m.group(1) + ("+00:00" if tz == "Z" else tz))
+    best = t if best is None or t > best else best
+print("yok" if best is None else int((datetime.datetime.now(datetime.timezone.utc) - best).total_seconds() // 60))
+' <<<"$json" 2>/dev/null || echo hata)
+    if [[ $age == yok ]]; then
+        d_crit "Hiç yedek yok (mc backup all)."
+    elif [[ ! $age =~ ^-?[0-9]+$ ]]; then
+        d_warn "Son yedek zamanı okunamadı."
+    elif ((age > 1560)); then
+        d_crit "Son yedek $((age / 60)) saat önce — mc-backup.timer çalışıyor mu? (systemctl list-timers)"
+    elif ((age > 120)); then
+        d_warn "Son yedek $((age / 60)) saat önce (saatlik bekleniyor)."
+    else
+        d_ok "Son yedek $age dakika önce."
+    fi
+}
+
+doctor_jars() {
+    local s
+    if [[ -d $SERVERS_DIR && ! -x $SERVERS_DIR ]]; then
+        d_skip "sunucu jar'ları (root gerekir)"
+        return 0
+    fi
+    while IFS= read -r s; do
+        if [[ -f $SERVERS_DIR/$s/server.jar ]]; then
+            d_ok "$s: server.jar var."
+        else
+            d_crit "$s: $SERVERS_DIR/$s/server.jar yok — mc download all $s"
+        fi
+    done < <(list_servers)
+}
+
+cmd_doctor() {
+    (($# == 0)) || die "Kullanım: mc doctor"
+    load_network_env
+    log_info "kami sağlık denetimi ($(hostname 2>/dev/null || echo '?'))"
+    doctor_java
+    doctor_memory
+    doctor_steal
+    doctor_secrets
+    doctor_ufw
+    doctor_ports
+    doctor_disk
+    doctor_backup
+    doctor_jars
+    if ((${#DOC_SKIPPED[@]})); then
+        log_info "Atlanan denetimler: $(printf '%s; ' "${DOC_SKIPPED[@]}")"
+    fi
+    log_info "Özet: $DOC_WARN uyarı, $DOC_CRIT kritik."
+    ((DOC_CRIT == 0))
+}
+
+# --- Dağıtıcı ----------------------------------------------------------------
+
+main() {
+    local cmd=${1:-help}
+    (($# == 0)) || shift
+    case $cmd in
+        help | -h | --help) usage ;;
+        download) delegate download.sh "$@" ;;
+        apply) delegate apply-config.sh "$@" ;;
+        init) cmd_init "$@" ;;
+        start) cmd_start "$@" ;;
+        stop) cmd_stop "$@" ;;
+        restart) cmd_restart "$@" ;;
+        status) cmd_status "$@" ;;
+        log | logs) cmd_log "$@" ;;
+        cmd) cmd_cmd "$@" ;;
+        rcon) cmd_rcon "$@" ;;
+        say) cmd_say "$@" ;;
+        countdown-restart) cmd_countdown_restart "$@" ;;
+        backup) delegate backup.sh "$@" ;;
+        restore) delegate backup.sh restore "$@" ;;
+        new-server) delegate new-server.sh "$@" ;;
+        doctor) cmd_doctor "$@" ;;
+        *) die "Bilinmeyen komut: $cmd — komutlar için: mc help" ;;
+    esac
+}
+
+main "$@"

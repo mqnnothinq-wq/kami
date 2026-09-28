@@ -1,0 +1,16 @@
+# Saatlik yedek: tüm sunucular (+ MariaDB dökümü) restic deposuna.
+# Depo ve parola: /etc/minecraft/backup.env (backup.sh okur).
+[Unit]
+Description=Minecraft yedeği (restic)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/mc backup all
+Nice=10
+IOSchedulingClass=idle
+# Takılan bir yedeği sonsuza dek bekleme (ilk tam yedek uzun sürebilir: onu elle `mc backup all` ile alın).
+# Süre dolunca SIGTERM gelir; backup.sh çıkarken sunuculara save-on geri verir.
+TimeoutStartSec=2h

@@ -1,0 +1,12 @@
+# Paper dünya varsayılanları
+_version: 31
+anticheat:
+  anti-xray:
+    enabled: false
+    engine-mode: 1
+    hidden-blocks:
+      - copper_ore
+      - deepslate_copper_ore
+      - gold_ore
+      - diamond_ore
+    lava-obscures: false

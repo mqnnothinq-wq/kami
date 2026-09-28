@@ -1,0 +1,26 @@
+{
+  "project_id": "floodgate",
+  "project_name": "Floodgate",
+  "version": "2.2.5",
+  "build": 125,
+  "time": "2026-09-27T12:00:00.000Z",
+  "channel": "default",
+  "promoted": false,
+  "changes": [
+    {
+      "commit": "000000000000000000000000000000000000007d",
+      "summary": "Değişiklik",
+      "message": "Değişiklik"
+    }
+  ],
+  "downloads": {
+    "spigot": {
+      "name": "Floodgate-Spigot.jar",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "velocity": {
+      "name": "Floodgate-Velocity.jar",
+      "sha256": "c45ef3317124f63a8ca242edb9a5290975f0b4ccb624dcb994de1ccbe692d1dd"
+    }
+  }
+}

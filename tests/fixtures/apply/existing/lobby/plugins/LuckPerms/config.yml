@@ -1,0 +1,10 @@
+# LuckPerms varsayılan config'i (eklentinin ürettiği)
+server: global
+storage-method: h2
+data:
+  address: localhost
+  database: minecraft
+  username: root
+  password: ''
+  pool-settings:
+    maximum-pool-size: 10

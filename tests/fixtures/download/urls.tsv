@@ -1,0 +1,23 @@
+# Test: URL -> yerel dosya eşlemesi (test_download.sh ağ çağrılarını buradan yanıtlar)
+https://fill.papermc.io/v3/projects/paper/versions/26.2/builds	api/paper-26.2-builds.json
+https://fill-data.papermc.io/v1/objects/0d75641f69139cbe4f86941a88b47704189440bebe91218c56571f034fc647f3/paper-26.2-16.jar	payload/paper-26.2-16.bin
+https://fill.papermc.io/v3/projects/velocity	api/velocity-project.json
+https://fill.papermc.io/v3/projects/velocity/versions/4.2.0/builds	api/velocity-4.2.0-builds.json
+https://fill-data.papermc.io/v1/objects/a05a2e3a2cb4a5945eb7cd13c61d8432b8d133b50e00d20f1b55f1c8183b24f7/velocity-4.2.0-520.jar	payload/velocity-4.2.0-520.bin
+https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest	api/geyser-latest.json
+https://download.geysermc.org/v2/projects/geyser/versions/2.11.2/builds/1003/downloads/velocity	payload/geyser-velocity.bin
+https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest	api/floodgate-latest.json
+https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/125/downloads/velocity	payload/floodgate-velocity.bin
+https://metadata.luckperms.net/data/all	api/luckperms-all.json
+https://download.luckperms.net/1600/velocity/LuckPerms-Velocity-5.5.17.jar	payload/luckperms-velocity.bin
+https://download.luckperms.net/1600/bukkit/loader/LuckPerms-Bukkit-5.5.17.jar	payload/luckperms-bukkit.bin
+https://api.modrinth.com/v2/project/viaversion/version?loaders=%5B%22paper%22%5D&game_versions=%5B%2226.2%22%5D	api/modrinth-viaversion-paper.json
+https://cdn.modrinth.com/data/test/versions/x/ViaVersion-5.5.1.jar	payload/viaversion.bin
+https://api.modrinth.com/v2/project/chunky/version?loaders=%5B%22paper%22%5D&game_versions=%5B%2226.2%22%5D	api/modrinth-chunky-paper.json
+https://cdn.modrinth.com/data/test/versions/x/Chunky-Bukkit-1.4.40.jar	payload/chunky.bin
+https://hangar.papermc.io/api/v1/projects/ViaBackwards/latestrelease	api/hangar-viabackwards-latestrelease.txt
+https://hangar.papermc.io/api/v1/projects/ViaBackwards/versions/5.5.1	api/hangar-viabackwards-5.5.1.json
+https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.5.1/PAPER/ViaBackwards-5.5.1.jar	payload/viabackwards.bin
+https://api.github.com/repos/jonesdevelopment/sonar/releases/latest	api/github-sonar-latest.json
+https://github.com/jonesdevelopment/sonar/releases/download/2.1.52/Sonar-Velocity.jar	payload/sonar-velocity.bin
+https://downloads.example.org/Example-1.0.jar	payload/example-url.bin

@@ -1,0 +1,12 @@
+{
+  "project": {
+    "id": "velocity",
+    "name": "Velocity"
+  },
+  "versions": {
+    "4.0.0": [
+      "4.2.1-SNAPSHOT",
+      "4.1.0-SNAPSHOT"
+    ]
+  }
+}

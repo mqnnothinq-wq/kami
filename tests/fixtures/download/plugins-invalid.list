@@ -1,0 +1,12 @@
+# Hatalı satırlar: her biri reddedilmeli; geçerli iki satır kalmalı
+all           Gecerli1     modrinth    viaversion
+lobby         EksikUrl     url         https://example.org/x.jar
+lobby         KotuKaynak   ftp         x
+lobby         Ters/Ad      modrinth    x
+lobby         KisaSha      url         https://example.org/y.jar   abc123
+LOBBY         BuyukHarf    modrinth    x
+lobby         AzSutun      modrinth
+lobby         GitHubBozuk  github      sahip-depo-dosya
+lobby         HttpUrl      url         http://example.org/z.jar    4c55374f54e763fdff0ac5d4e7e4931defda5d1b06f1930f3e41c53680f280c7
+lobby         Fazla        modrinth    x   4c55374f54e763fdff0ac5d4e7e4931defda5d1b06f1930f3e41c53680f280c7  ekstra
+survival      Gecerli2     hangar      ViaBackwards   4C55374F54E763FDFF0AC5D4E7E4931DEFDA5D1B06F1930F3E41C53680F280C7

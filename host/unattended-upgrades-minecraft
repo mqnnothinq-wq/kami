@@ -1,0 +1,16 @@
+// Kurulum yeri: /etc/apt/apt.conf.d/52unattended-upgrades-minecraft
+// Güvenlik güncellemeleri otomatik kalır; ama çalışan sunucuların altındaki JVM ve veritabanı
+// kendiliğinden değişmez: bunlar duyurulu bakımda elle güncellenir (apt-get upgrade).
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+
+Unattended-Upgrade::Package-Blacklist {
+    "openjdk-25-";
+    "temurin-";
+    "mariadb-";
+};
+
+// Makine asla kendiliğinden yeniden başlamaz (oyuncular atılır). Gerekirse: /var/run/reboot-required
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";

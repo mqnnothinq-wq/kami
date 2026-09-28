@@ -1,0 +1,6 @@
+# Paper JVM bayrakları (test fikstürü)
+-XX:+UseG1GC -XX:+ParallelRefProcEnabled
+
+   -XX:MaxGCPauseMillis=200   
+  # girintili yorum da yok sayılır
+-Duser.language=en -Duser.country=US

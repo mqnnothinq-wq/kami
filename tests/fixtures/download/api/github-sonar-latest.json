@@ -1,0 +1,18 @@
+{
+  "tag_name": "2.1.52",
+  "name": "2.1.52",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "Sonar-Bukkit.jar",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "browser_download_url": "https://github.com/jonesdevelopment/sonar/releases/download/2.1.52/Sonar-Bukkit.jar"
+    },
+    {
+      "name": "Sonar-Velocity.jar",
+      "digest": "sha256:5bb44d6ed9d20bec1c767ffe0e4faf6edecd537f12f602bac00f80d35d0affed",
+      "browser_download_url": "https://github.com/jonesdevelopment/sonar/releases/download/2.1.52/Sonar-Velocity.jar"
+    }
+  ]
+}

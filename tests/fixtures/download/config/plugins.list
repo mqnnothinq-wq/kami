@@ -1,0 +1,13 @@
+# Test listesi — tüm kaynak türleri ve sunucu seçicileri
+# sunucular        ad            kaynak      kimlik                                   [sha256]
+velocity           Geyser        geysermc    geyser/velocity
+velocity           Floodgate     geysermc    floodgate/velocity      # satır sonu yorumu
+velocity           LuckPerms     luckperms   velocity
+lobby,survival     LuckPerms     luckperms   bukkit
+backends           ViaVersion    modrinth    viaversion
+	velocity	Sonar	github	jonesdevelopment/sonar:Sonar-Velocity.jar
+survival           Chunky        modrinth    chunky
+backends           ViaBackwards  hangar      ViaBackwards
+survival           Example       url         https://downloads.example.org/Example-1.0.jar   4c55374f54e763fdff0ac5d4e7e4931defda5d1b06f1930f3e41c53680f280c7
+
+   # girintili yorum satırı

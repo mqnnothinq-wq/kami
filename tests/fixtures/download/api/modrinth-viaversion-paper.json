@@ -1,0 +1,74 @@
+[
+  {
+    "id": "b1",
+    "project_id": "P1OZGk5p",
+    "author_id": "x",
+    "featured": false,
+    "name": "5.6.0-SNAPSHOT+900",
+    "version_number": "5.6.0-SNAPSHOT+900",
+    "changelog_url": null,
+    "date_published": "2026-09-20T00:00:00Z",
+    "downloads": 1,
+    "version_type": "beta",
+    "status": "listed",
+    "requested_status": null,
+    "loaders": [
+      "paper",
+      "velocity"
+    ],
+    "game_versions": [
+      "26.2",
+      "26.3"
+    ],
+    "dependencies": [],
+    "files": [
+      {
+        "hashes": {
+          "sha512": "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+          "sha1": "0000000000000000000000000000000000000000"
+        },
+        "url": "https://cdn.modrinth.com/data/test/versions/x/ViaVersion-5.6.0-SNAPSHOT.jar",
+        "filename": "ViaVersion-5.6.0-SNAPSHOT.jar",
+        "primary": true,
+        "size": 100,
+        "file_type": null
+      }
+    ]
+  },
+  {
+    "id": "r1",
+    "project_id": "P1OZGk5p",
+    "author_id": "x",
+    "featured": false,
+    "name": "5.5.1",
+    "version_number": "5.5.1",
+    "changelog_url": null,
+    "date_published": "2026-09-20T00:00:00Z",
+    "downloads": 1,
+    "version_type": "release",
+    "status": "listed",
+    "requested_status": null,
+    "loaders": [
+      "paper",
+      "velocity"
+    ],
+    "game_versions": [
+      "26.2",
+      "26.3"
+    ],
+    "dependencies": [],
+    "files": [
+      {
+        "hashes": {
+          "sha512": "d396494cc16ace63efc7abf348420d75db65d6ed7a4e9c5ccb5c671ae4f99f33f4ef31d5659173479ffb55c6a619fcc75591c96aa0b70fcd06f318dbb080ee98",
+          "sha1": "0000000000000000000000000000000000000000"
+        },
+        "url": "https://cdn.modrinth.com/data/test/versions/x/ViaVersion-5.5.1.jar",
+        "filename": "ViaVersion-5.5.1.jar",
+        "primary": true,
+        "size": 100,
+        "file_type": null
+      }
+    ]
+  }
+]

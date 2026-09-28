@@ -1,0 +1,6 @@
+# lobi ilk açılış komutları (test fikstürü)
+gamerule minecraft:spawn_mobs false
+
+gamerule minecraft:advance_time false
+  # girintili yorum
+/lp group default permission set kami.test true

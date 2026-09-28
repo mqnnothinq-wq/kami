@@ -1,0 +1,13 @@
+# Paper genel ayar override'ı (test)
+chunk-system:
+  io-threads: -1
+  worker-threads: 1
+proxies:
+  velocity:
+    enabled: true
+    online-mode: true
+    secret: ''
+misc:
+  max-joins-per-tick: 3
+eski-ayar:
+  alt-anahtar: true

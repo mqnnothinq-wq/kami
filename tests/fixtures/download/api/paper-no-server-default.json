@@ -1,0 +1,24 @@
+[
+  {
+    "id": 9,
+    "time": "2026-09-20T10:00:00.000Z",
+    "channel": "STABLE",
+    "commits": [
+      {
+        "sha": "0000000000000000000000000000000000000009",
+        "time": "2026-09-20T09:00:00Z",
+        "message": "Build 9\n"
+      }
+    ],
+    "downloads": {
+      "server:mojmap": {
+        "name": "paper-26.2-9.jar",
+        "checksums": {
+          "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        },
+        "size": 52528557,
+        "url": "https://fill-data.papermc.io/v1/objects/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/paper-26.2-9.jar"
+      }
+    }
+  }
+]

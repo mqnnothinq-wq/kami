@@ -1,0 +1,17 @@
+# Kurulum yeri: /etc/fail2ban/jail.local
+# Debian 12+'da rsyslog/auth.log yok: günlükler journald'dan okunur (python3-systemd gerekir).
+# Yasaklar UFW ile uygulanır.
+[DEFAULT]
+backend  = systemd
+banaction = ufw
+banaction_allports = ufw
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1
+# Tekrar eden saldırganlar için artan yasak süresi (en çok 1 hafta)
+bantime.increment = true
+bantime.maxtime   = 1w
+
+[sshd]
+enabled = true

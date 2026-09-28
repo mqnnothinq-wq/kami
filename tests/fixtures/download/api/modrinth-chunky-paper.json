@@ -1,0 +1,49 @@
+[
+  {
+    "id": "c1",
+    "project_id": "P1OZGk5p",
+    "author_id": "x",
+    "featured": false,
+    "name": "1.4.40",
+    "version_number": "1.4.40",
+    "changelog_url": null,
+    "date_published": "2026-09-20T00:00:00Z",
+    "downloads": 1,
+    "version_type": "release",
+    "status": "listed",
+    "requested_status": null,
+    "loaders": [
+      "paper",
+      "velocity"
+    ],
+    "game_versions": [
+      "26.2",
+      "26.3"
+    ],
+    "dependencies": [],
+    "files": [
+      {
+        "hashes": {
+          "sha512": "33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+          "sha1": "0000000000000000000000000000000000000000"
+        },
+        "url": "https://cdn.modrinth.com/data/test/versions/x/Chunky-1.4.40-sources.jar",
+        "filename": "Chunky-1.4.40-sources.jar",
+        "primary": false,
+        "size": 100,
+        "file_type": null
+      },
+      {
+        "hashes": {
+          "sha512": "db9784a0015f36d33b523e98c42179a86fbaa4f2571482c1fcd4b34ddcf493a23b134218b502941f682807dd18505dbd3ac1e4ad98cfa0cfd6025fd29201cf87",
+          "sha1": "0000000000000000000000000000000000000000"
+        },
+        "url": "https://cdn.modrinth.com/data/test/versions/x/Chunky-Bukkit-1.4.40.jar",
+        "filename": "Chunky-Bukkit-1.4.40.jar",
+        "primary": true,
+        "size": 100,
+        "file_type": null
+      }
+    ]
+  }
+]

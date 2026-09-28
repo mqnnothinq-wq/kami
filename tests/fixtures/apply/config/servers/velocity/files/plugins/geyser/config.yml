@@ -1,0 +1,5 @@
+# Geyser (hedef yoksa atlanmalı)
+bedrock:
+  port: 19132
+java:
+  auth-type: floodgate

@@ -1,0 +1,24 @@
+# Velocity yapılandırması (test fikstürü)
+config-version = "2.9"
+bind = "0.0.0.0:@@PUBLIC_JAVA_PORT@@"
+motd = "<#09add3>Kami ağı"
+show-max-players = 100
+online-mode = false
+force-key-authentication = true
+player-info-forwarding-mode = "MODERN"
+forwarding-secret-file = ""
+
+[servers]
+# Backend sunucular (yalnız 127.0.0.1)
+lobby = "127.0.0.1:30066"
+survival = "127.0.0.1:30067"
+
+# Oyuncunun bağlanacağı sunucu sırası
+try = [
+    "lobby"
+]
+
+[forced-hosts]
+
+[advanced]
+compression-threshold = 256

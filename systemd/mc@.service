@@ -1,0 +1,80 @@
+# Tek şablon: Paper backend'leri ve Velocity proxy'si (mc@velocity, mc@lobby, mc@survival ...).
+# Sunucuya özgü ayarlar:
+#   /opt/minecraft/servers/%i/jvm.env                  (JAVA_MEM, JAVA_OPTS, SERVER_ARGS — mc apply üretir)
+#   /etc/systemd/system/mc@%i.service.d/20-resources.conf (CPUWeight, OOMScoreAdjust — mc apply üretir)
+# Konsol: `mc cmd <srv> <komut>` (FIFO), günlük: `mc log <srv>`.
+[Unit]
+Description=Minecraft sunucusu (%i)
+Wants=network-online.target
+After=network-online.target mariadb.service mc@%i.socket
+Requires=mc@%i.socket
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=minecraft
+Group=minecraft
+WorkingDirectory=/opt/minecraft/servers/%i
+EnvironmentFile=/etc/minecraft/secrets.env
+EnvironmentFile=/opt/minecraft/servers/%i/jvm.env
+Environment=LANG=C.UTF-8
+
+# Bekleyen güncellemeleri uygula (mc download bunları hazırlar; çalışan sunucunun jar'ına dokunulmaz):
+#   server.jar.new varsa -> eski jar server.jar.old olur, yenisi server.jar olur
+#   plugins/update/*.jar -> plugins/ altına taşınır (aynı adlı dosyanın üzerine yazar)
+# Not: systemd '$' işaretini kendisi genişletir; kabuğun görmesi gereken '$' burada '$$' yazılır.
+ExecStartPre=/bin/sh -c 'set -e; \
+  if [ -f server.jar.new ]; then \
+    if [ -f server.jar ]; then mv -f server.jar server.jar.old; fi; \
+    mv -f server.jar.new server.jar; \
+    echo "server.jar yeni sürümle değiştirildi"; \
+  fi; \
+  if [ -d plugins/update ]; then \
+    for f in plugins/update/*.jar; do \
+      [ -f "$$f" ] || continue; \
+      mv -f "$$f" plugins/; \
+      echo "eklenti güncellendi: $${f##*/}"; \
+    done; \
+  fi'
+ExecStart=/usr/bin/java $JAVA_MEM $JAVA_OPTS -jar server.jar $SERVER_ARGS
+
+Sockets=mc@%i.socket
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mc-%i
+
+# Paper ve Velocity SIGTERM'de kaydedip düzgün kapanır (JVM 143 ile çıkar).
+# Oyun içi /stop ve /restart 0 ile çıkar -> Restart=always geri getirir; `systemctl stop` durdurur.
+KillSignal=SIGTERM
+SuccessExitStatus=0 143
+TimeoutStopSec=180
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+UMask=0027
+
+# Sertleştirme (MemoryDenyWriteExecute KULLANILMAZ: JIT derleyicisini bozar)
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/minecraft/servers/%i
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

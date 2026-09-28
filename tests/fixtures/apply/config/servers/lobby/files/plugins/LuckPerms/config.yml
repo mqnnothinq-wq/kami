@@ -1,0 +1,7 @@
+server: '@@SERVER_NAME@@'
+storage-method: MariaDB
+data:
+  address: '@@DB_HOST@@:@@DB_PORT@@'
+  database: luckperms
+  username: '@@DB_USER@@'
+  password: '@@DB_PASSWORD@@'

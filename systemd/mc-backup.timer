@@ -1,0 +1,10 @@
+[Unit]
+Description=Saatlik Minecraft yedeği (her saat :07)
+
+[Timer]
+OnCalendar=*-*-* *:07:00
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target
