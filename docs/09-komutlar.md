@@ -52,7 +52,14 @@ sudo mc download --dry-run            # hiçbir şey indirmeden ne yapılacağı
   Sunucu hiç başlamadıysa `plugins/`'e, başladıysa `plugins/update/`'e iner.
 - Aynı sürüm zaten kuruluysa atlanır. Bir öğe başarısız olursa diğerlerine devam edilir, sonda
   özet tablo basılır ve komut **1** ile çıkar.
-- GitHub API sınırına takılırsanız: `sudo GITHUB_TOKEN=<jeton> mc download`.
+- GitHub API sınırına takılırsanız bir jetonla çalıştırın. Jetonu komut satırına yazmayın
+  (`sudo GITHUB_TOKEN=… mc download` jetonu `ps` çıktısına ve kabuk geçmişine koyar):
+
+  ```bash
+  read -rs GITHUB_TOKEN && export GITHUB_TOKEN     # jetonu yapıştırın, Enter (ekranda görünmez)
+  sudo --preserve-env=GITHUB_TOKEN mc download
+  unset GITHUB_TOKEN
+  ```
 
 ### mc apply
 
@@ -135,7 +142,13 @@ klonlar, commit'e geçer; JDK 25 `javac` yoksa `temurin-25-jdk`'yı (Adoptium de
 `./gradlew --no-daemon build` komutunu **`nobody` kullanıcısıyla** (asla root değil) çalıştırır;
 sonucu `/opt/minecraft/artifacts/LibreLogin-<ilk7>.jar` (0644 root) ve `.sha256` olarak koyar,
 özeti ve sonraki adımı (`sudo mc download plugins velocity`) yazar. `plugins.list`'teki satır
-başka bir dosyayı gösteriyorsa uyarır. Ağ/derleme hatasında Türkçe bir mesajla durur.
+başka bir dosyayı gösteriyorsa ya da LibreLogin `local` satırı yoksa uyarır. Ağ/derleme hatasında
+Türkçe bir mesajla durur; aynı anda yalnız bir derleme çalışır. Kurduğu JDK'yı (başarısız
+derlemede de) kaldırır ve `/usr/bin/java` seçimi değiştiyse eskisini geri koyar. Derleme
+kullanıcısına temiz bir ortam verilir; yalnız vekil sunucu ve sertifika değişkenleri
+(`http(s)_proxy`, `no_proxy`, `JAVA_TOOL_OPTIONS`, `GRADLE_OPTS`, `SSL_CERT_FILE`,
+`GIT_SSL_CAINFO`) aktarılır (sudo bunları varsayılan olarak siler; gerekirse
+`sudo --preserve-env=https_proxy,…` ile verin). `--dry-run` root gerektirmez.
 
 ## Çalıştırma
 
@@ -321,13 +334,14 @@ install.sh onu silmez.
 | `/etc/needrestart/conf.d/minecraft.conf`, `/etc/apt/apt.conf.d/52unattended-upgrades-minecraft` | Otomatik güncelleme ve yeniden başlatma istisnaları |
 | `/etc/ssh/sshd_config.d/00-kami-hardening.conf` | `--harden-ssh` ile SSH ayarı |
 | `/swapfile` | 2 GB swap (install.sh) |
-| Günlükler | `journalctl -u mc@<sunucu>` (etiket `mc-<sunucu>`), ayrıca `/opt/minecraft/servers/<sunucu>/logs/` |
+| Günlükler | `sudo journalctl -u mc@<sunucu>` (etiket `mc-<sunucu>`), ayrıca `/opt/minecraft/servers/<sunucu>/logs/` (root ile okunur) |
 
 ## İleri düzey ortam değişkenleri
 
 | Değişken | Nerede | Anlamı |
 |---|---|---|
-| `GITHUB_TOKEN` | `mc download` | GitHub API istek sınırını aşmak için jeton (komut satırında görünmez) |
+| `GITHUB_TOKEN` | `mc download` | GitHub API istek sınırını aşmak için jeton. Betik onu curl'ün komut satırına koymaz; siz de `sudo --preserve-env=GITHUB_TOKEN` ile aktarın ([mc download](#mc-download)) |
+| `PICOLIMBO_SHA256` | `network.env` → `mc download` | PicoLimbo arşivinin (`pico_limbo_linux-x86_64-musl.tar.gz`) beklenen SHA-256'sı (isteğe bağlı sabitleme). GitHub sürümünde özet yoksa arşiv yalnız HTTPS'e güvenilerek kurulur; bu değer verilirse doğrulanır, GitHub özetiyle çelişirse indirme durur. `PICOLIMBO_VERSION` değişince bunu da güncelleyin |
 | `MC_READY_TIMEOUT` | `mc init` | Hazır satırı için en uzun bekleme (sn, varsayılan 600) |
 | `MC_RCON_WAIT` | `mc init` | RCON'un açılması için bekleme (sn, varsayılan 60) |
 | `MC_LOCK_WAIT` | `mc countdown-restart` | Yedek kilidi için bekleme (sn, varsayılan 900) |

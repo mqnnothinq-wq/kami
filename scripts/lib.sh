@@ -12,7 +12,8 @@
 #   Sunucular    : list_servers list_backends list_proxies list_nonproxy server_exists server_get
 #                  validate_server_name resolve_targets
 #   systemd      : unit_of is_running server_running
-#   Yetki ayrımı : as_user as_mc require_mc_user
+#   Yetki ayrımı : as_user as_mc require_mc_user ensure_build_user
+#   Eklentiler   : plugins_list_file plugin_local_ids local_expand librelogin_jar
 #   Kilit        : backup_lock
 #   Bellek       : heap_to_mib fmt_mib
 # Bir yardımcı birden çok betikte gerekiyorsa buraya taşıyın; betiklerde kopyası olmasın.
@@ -32,6 +33,11 @@ SECRETS_FILE="$MC_ETC/secrets.env"
 BACKUP_ENV_FILE="$MC_ETC/backup.env"
 MC_USER="${MC_USER:-minecraft}"
 MC_RUN_DIR="${MC_RUN_DIR:-/run/minecraft}"
+# LibreLogin'i derleyen ayrı sistem kullanıcısı (scripts/build-librelogin.sh; install.sh oluşturur).
+# Ek grubu, evi ve kabuğu yok; asla root ya da $MC_USER olamaz. 'nobody' gibi paylaşılan bir kimlik
+# KULLANILMAZ: aynı kimlikle çalışan başka bir süreç derleme çıktısını değiştirebilir, derlemenin
+# ardından o kullanıcının tüm süreçleri öldürülür.
+LIBRELOGIN_BUILD_USER="${LIBRELOGIN_BUILD_USER:-kami-build}"
 
 # --- Günlük / hata --------------------------------------------------------
 if [[ -t 2 ]]; then
@@ -236,6 +242,51 @@ require_mc_user() {
 # sembolik bağ bırakabilir. Bu dizinlerdeki okuma/yazma/silme işlemleri bununla yapılır ki bağ
 # izlense bile minecraft'ın zaten erişebildiğinden fazlasına ulaşılamasın.
 as_mc() { as_user "$MC_USER" "$@"; }
+
+# ensure_build_user [çalıştırıcı] — $LIBRELOGIN_BUILD_USER yoksa grupsuz (yalnız kendi birincil grubu),
+# evsiz, oturum açamayan bir sistem kullanıcısı olarak oluşturur (root gerekir). Varsa dokunmaz.
+# İsteğe bağlı çalıştırıcı komutların önüne eklenir (ör. install.sh'in 'run'ı: --dry-run'da yalnız
+# yazdırır).
+ensure_build_user() {
+    local u=$LIBRELOGIN_BUILD_USER
+    local -a r=()
+    if [[ -n ${1:-} ]]; then r=("$1"); fi
+    if id -u -- "$u" >/dev/null 2>&1; then return 0; fi
+    getent group "$u" >/dev/null || "${r[@]}" groupadd --system "$u"
+    "${r[@]}" useradd --system --gid "$u" --home-dir /nonexistent --no-create-home \
+        --shell /usr/sbin/nologin --comment "kami LibreLogin derlemesi" "$u"
+}
+
+# --- Eklenti listesi -------------------------------------------------------
+# plugins_list_file — config/plugins.list yolu (testlerde PLUGINS_LIST ile değiştirilebilir).
+plugins_list_file() { printf '%s\n' "${PLUGINS_LIST:-$CONFIG_DIR/plugins.list}"; }
+
+# plugin_local_ids <ad> — plugins.list'te <ad> eklentisinin "local" kaynaklı satırlarının kimliğini
+# (açılmamış; ör. '$MC_ROOT/artifacts/LibreLogin-39397c4.jar') satır satır yazar. Liste yoksa boş.
+plugin_local_ids() {
+    local f
+    f=$(plugins_list_file)
+    [[ -f $f ]] || return 0
+    awk -v n="$1" '$1 !~ /^#/ && $2 == n && $3 == "local" { print $4 }' "$f"
+}
+
+# local_expand <kimlik> — "local" kimliğinin başındaki '$MC_ROOT' / '${MC_ROOT}' önekini açar
+# (başka genişletme yapılmaz).
+local_expand() {
+    # shellcheck disable=SC2016  # '$MC_ROOT' kimlikte birebir yazılır
+    case $1 in
+        '$MC_ROOT'/*) printf '%s\n' "$MC_ROOT/${1#'$MC_ROOT'/}" ;;
+        '${MC_ROOT}'/*) printf '%s\n' "$MC_ROOT/${1#'${MC_ROOT}'/}" ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
+# librelogin_jar <commit> — derlenen LibreLogin jar'ının adı: LibreLogin-<commit'in ilk 7 hanesi>.jar
+# (küçük harf). network.env LIBRELOGIN_COMMIT ile plugins.list'teki LibreLogin satırı bu adla eşleşir.
+librelogin_jar() {
+    local c=${1,,}
+    printf 'LibreLogin-%s.jar\n' "${c:0:7}"
+}
 
 # --- Kilit -----------------------------------------------------------------
 # backup_lock <bekleme-sn> <hata-mesajı> — $MC_ROOT/.backup.lock kilidini alır; süreç bitene dek

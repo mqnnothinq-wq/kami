@@ -718,16 +718,6 @@ core_limbo() {
 }
 
 # --- Eklentiler -------------------------------------------------------------
-# local_expand <kimlik> — baştaki '$MC_ROOT' / '${MC_ROOT}' önekini açar (başka genişletme yapılmaz)
-local_expand() {
-    # shellcheck disable=SC2016  # '$MC_ROOT' kimlikte birebir yazılır
-    case $1 in
-        '$MC_ROOT'/*) printf '%s\n' "$MC_ROOT/${1#'$MC_ROOT'/}" ;;
-        '${MC_ROOT}'/*) printf '%s\n' "$MC_ROOT/${1#'${MC_ROOT}'/}" ;;
-        *) printf '%s\n' "$1" ;;
-    esac
-}
-
 # local_path <yol> — gerçek yolu yazar; $MC_ROOT/artifacts/ altında düzenli dosya olmalı
 local_path() {
     local p=$1 base real
@@ -1054,7 +1044,7 @@ main() {
         done
     fi
     if [[ $mode == all || $mode == plugins ]]; then
-        if ! load_plugins_list "${PLUGINS_LIST:-$CONFIG_DIR/plugins.list}"; then
+        if ! load_plugins_list "$(plugins_list_file)"; then
             FAILS=$((FAILS + PL_ERRORS))
             report "-" "plugins.list" "HATA" "$PL_ERRORS geçersiz satır atlandı"
         fi

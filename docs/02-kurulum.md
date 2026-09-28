@@ -228,8 +228,9 @@ Ne yapar:
 1. `https://github.com/kyngs/LibreLogin` (dal `dev`) deposunu `/var/tmp` altında root'a ait geçici
    bir dizinin içine klonlar ve `LIBRELOGIN_COMMIT` commit'ine geçer.
 2. JDK 25 gerekir: sistemde zaten bir JDK 25 `javac` yoksa `temurin-25-jdk`'yı install.sh'in
-   eklediği Adoptium deposundan geçici olarak kurar, iş bitince kaldırır (`--keep-jdk` ile
-   bırakılır; zaten kuruluysa dokunulmaz).
+   eklediği Adoptium deposundan geçici olarak kurar, iş bitince (derleme başarısız olsa da)
+   kaldırır (`--keep-jdk` ile bırakılır; zaten kuruluysa dokunulmaz). Kurma/kaldırma
+   `/usr/bin/java` seçimini (sunucuların kullandığı Java) değiştirirse betik eskisini geri koyar.
 3. Klonlamayı ve `./gradlew --no-daemon build` komutunu **yetkisiz `nobody` kullanıcısıyla**
    (geçici bir HOME ile; asla root olarak değil) çalıştırır, çünkü derleme indirilen kodu çalıştırır.
    Geçici dizin sonunda silinir.
@@ -374,10 +375,11 @@ sudo mc rcon lobby "lp user .OyuncuAdiniz permission set * true"
 
 `*` her şeye izin verir; yalnız kurucu hesabına verin. Kalıcı düzen için grup ve yetki yolu
 (track) kurun: [docs/06](06-eklentiler.md#luckperms-grup-ve-yetki-yolu-önerisi). Değişiklik bir
-sunucuya yansımadıysa (eklenti mesajları o sunucuda oyuncu yokken geç yayılır) `lp sync`'i
-**o sunucuda** çalıştırın; komut yalnız çalıştığı sunucunun verisini veritabanından yeniler:
-`sudo mc rcon survival "lp sync"` (Velocity için: `sudo mc cmd velocity lpv sync`). Velocity tarafındaki komut
-`lpv`'dir (ör. oyun içinde `/lpv user <ad> info`).
+sunucuya yansımadıysa (eklenti mesajları oyuncu bağlantıları üzerinden gider; o an oyuncusu
+olmayan sunuculara ulaşmaz) `lp sync`'i **o sunucuda** çalıştırın; komut yalnız çalıştığı
+sunucunun verisini veritabanından yeniler: `sudo mc rcon survival "lp sync"` (Velocity için:
+`sudo mc cmd velocity lpv sync`). Velocity tarafındaki komut `lpv`'dir (ör. oyun içinde
+`/lpv user <ad> info`).
 
 **OP** yalnız o Paper sunucusunda vanilla yetki verir ve proxy'yi kapsamaz; LuckPerms varken
 gerekmez. Yine de isterseniz:

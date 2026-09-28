@@ -79,6 +79,11 @@ Depo, DeHost'un dahil korumasını **şeffaf** kabul eder (DOĞRULANMADI; soru 5
 [docs/01](01-donanim-ve-kapasite.md#satın-almadan-önce-dehosta-sorulacak-11-soru)). Ayrı bir
 GameShield hesabı açarsanız durum değişir.
 
+**UFW'yi elle daralttıysanız dikkat:** install.sh her çalıştığında `ufw allow 25565/tcp` ve
+`ufw allow 19132/udp` kurallarını **yeniden ekler**. 25565'i yalnız vekilin IP aralıklarına
+açtıysanız install.sh'i yeniden çalıştırdıktan sonra genel kuralı tekrar silin
+(`sudo ufw delete allow 25565/tcp`) ve `sudo ufw status numbered` ile denetleyin.
+
 **Yanlış değer neye yol açar?**
 
 - `haproxy-protocol = true` ama PROXY başlığı gelmiyor: Velocity her bağlantının başında bu
@@ -210,8 +215,13 @@ değişikliği ek adımlar ister; fail2ban + anahtar girişi yeterlidir.
 - **Geri alma:** yeni jar devreye girdiğinde eskisi `server.jar.old` olarak kalır.
 
   ```bash
+  # Tam yollar kullanın: /opt/minecraft/servers yalnız minecraft kullanıcısına açıktır (0750),
+  # "cd" yönetici kullanıcısıyla çalışmaz.
+  sudo ls -l /opt/minecraft/servers/velocity/     # server.jar.old var mı? Yoksa geri alınacak sürüm yok
   sudo mc stop velocity
-  cd /opt/minecraft/servers/velocity && sudo mv server.jar server.jar.bozuk && sudo mv server.jar.old server.jar
+  sudo -u minecraft mv /opt/minecraft/servers/velocity/server.jar /opt/minecraft/servers/velocity/server.jar.bozuk
+  sudo -u minecraft mv /opt/minecraft/servers/velocity/server.jar.old /opt/minecraft/servers/velocity/server.jar
+  sudo -u minecraft rm -f /opt/minecraft/servers/velocity/server.jar.new   # bekleyen yeni jar varsa
   sudo mc start velocity
   ```
 

@@ -122,6 +122,8 @@ Bir kaynak başarısız olursa diğerleri yine indirilir; sonda özet tablo bas�
    birleştirilir; dizin adı eklentinin `plugins/` altında oluşturduğu adla birebir aynı olmalı
    (büyük/küçük harf dahil).
 5. Değişiklikleri depoya işleyin: `sudo git -C /opt/minecraft/kami add -A && sudo git -C /opt/minecraft/kami commit -m "WorldGuard eklendi"`.
+   ("Author identity unknown" hatası alırsanız git kimliğini bir kez tanımlayın:
+   [docs/02, 4. adım](02-kurulum.md#4-depoyu-indirin).)
 
 ### Elle indirilen eklenti (CoreProtect, EssentialsX geliştirme sürümü…)
 
@@ -260,8 +262,11 @@ sudo mc rcon lobby "lp user Mehmet info"
 - Velocity tarafında komut `lpv`'dir (oyun içinde `/lpv`). Velocity'deki izinler (ör. LibreLogin
   yetkili komutları) proxy'de değerlendirilir; LuckPerms'ün `server` bağlamı orada `velocity`'dir.
   Bir izni yalnız bir sunucuda vermek için sona `server=survival` ekleyin.
-- Değişiklikler proxy üzerinden eklenti mesajlarıyla yayılır; o sunucuda hiç oyuncu yoksa geç
-  yansıyabilir: `sudo mc rcon lobby "lp sync"`.
+- Değişiklikler proxy üzerinden eklenti mesajlarıyla yayılır. Bu mesajlar oyuncu bağlantıları
+  üzerinden gider: komutu çalıştırdığınız sunucuda oyuncu yoksa biri girene kadar bekler, o an
+  oyuncusu olmayan sunuculara ulaşmaz. Değişiklik bir sunucuya yansımadıysa
+  `lp sync`'i **o sunucuda** çalıştırın (komut yalnız çalıştığı sunucunun verisini veritabanından
+  yeniler): `sudo mc rcon survival "lp sync"`, Velocity için `sudo mc cmd velocity lpv sync`.
 - Yetkili hesaplar premium olmalıdır; premium hesaplarda LibreLogin `unregister`/`cracked`
   komutlarını kullanmayın ([docs/08](08-giris-sistemi.md#yetkili-komutları)).
 - `/server` komutu Velocity'de varsayılan olarak herkese açıktır (oyuncular lobiyle survival

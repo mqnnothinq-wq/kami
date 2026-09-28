@@ -199,8 +199,10 @@ Sonra:
 
 ```bash
 sudo mc start survival
-# Her şey yolundaysa kenara alınan eski dizini silin:
-sudo rm -rf /opt/minecraft/servers/survival.onceki-*
+# Her şey yolundaysa kenara alınan eski dizini silin. servers/ yönetici kullanıcısına kapalı (0750)
+# olduğundan "*" root kabuğunda genişletilmeli (sh -c); yoksa rm hiçbir şey silmeden başarılı döner.
+sudo sh -c 'ls -d /opt/minecraft/servers/survival.onceki-*'      # önce ne silineceğine bakın
+sudo sh -c 'rm -rf /opt/minecraft/servers/survival.onceki-*'
 ```
 
 **Veritabanını (LuckPerms) geri yüklemek** elle yapılır. Önce sunucuları durdurun
@@ -209,7 +211,7 @@ sudo rm -rf /opt/minecraft/servers/survival.onceki-*
 ```bash
 sudo -i
 set -a; . /etc/minecraft/backup.env; set +a
-restic snapshots --tag _mariadb
+restic snapshots --host "$BACKUP_HOST" --tag _mariadb     # tarih/saate bakıp kimliği seçin
 restic dump <snapshot> /mariadb.sql | mariadb
 exit
 ```
@@ -230,17 +232,34 @@ yöntemiyle), sunucu kapalıyken yerine koyun.
 
 ### Makine tamamen kaybolursa
 
-1. Yeni VDS'e [docs/02](02-kurulum.md) adımlarını uygulayın (4–6. adımlar).
-2. Sakladığınız `backup.env` ve `restic.pass` dosyalarını `/etc/minecraft/` altına koyun
-   (`sudo chmod 600`). `BACKUP_HOST` eski değerle aynı olmalı.
-3. Sunucuları geri yükleyin: `sudo mc restore velocity latest`, `limbo`, `lobby`, `survival`.
-4. Veritabanını ve derlenmiş jar'ları geri yükleyin (yukarıdaki `restic dump … | mariadb` ve
-   `restic restore latest --tag _artifacts --target /`).
-5. Yeni makinede gizli değerler yenidir; geri yüklenen dosyalara yazılmaları için
+1. Yeni VDS'e [docs/02](02-kurulum.md) adımlarını uygulayın (2–6. adımlar).
+2. **Önce zamanlayıcıları durdurun.** install.sh saatlik yedeği zaten açtı ve **boş** bir
+   `luckperms` veritabanı oluşturdu; eski depo bağlandıktan sonra çalışan bir saatlik yedek bu boş
+   veritabanını en yeni `_mariadb` anlık görüntüsü olarak yazar:
+
+   ```bash
+   sudo systemctl stop mc-backup.timer mc-prune.timer mc-daily-restart.timer
+   ```
+
+3. Sakladığınız `backup.env` ve `restic.pass` dosyalarını `/etc/minecraft/` altına koyun
+   (`sudo chmod 600 /etc/minecraft/backup.env /etc/minecraft/restic.pass`). `BACKUP_HOST` eski
+   değerle aynı olmalı.
+4. Sunucuları geri yükleyin: `sudo mc restore velocity latest`, `limbo`, `lobby`, `survival`.
+5. Veritabanını ve derlenmiş jar'ları geri yükleyin (yukarıdaki `restic dump … | mariadb` ve
+   `restic restore latest --host "$BACKUP_HOST" --tag _artifacts --target /`). Veritabanında
+   `latest` **kullanmayın**: `restic snapshots --host "$BACKUP_HOST" --tag _mariadb` listesinden
+   makine kaybından **önceki** anlık görüntünün kimliğini seçin.
+6. Yeni makinede gizli değerler yenidir; geri yüklenen dosyalara yazılmaları için
    `sudo mc apply all` çalıştırın.
-6. `sudo mc download` (Velocity ve PicoLimbo ikilileri yedekte yoktur; LibreLogin
+7. `sudo mc download` (Velocity ve PicoLimbo ikilileri yedekte yoktur; LibreLogin
    `/opt/minecraft/artifacts/`'tan kopyalanır — orada yoksa `sudo mc build-librelogin`),
    `sudo mc start all`, duman testi.
+8. Zamanlayıcıları yeniden başlatın ve ilk yedeği alın:
+
+   ```bash
+   sudo systemctl start mc-backup.timer mc-prune.timer mc-daily-restart.timer
+   sudo mc backup all && sudo mc doctor
+   ```
 
 ## Aylık geri yükleme testi
 
@@ -249,8 +268,8 @@ Hiç denenmemiş bir yedek, yedek sayılmaz. Ayda bir, sunuculara dokunmadan:
 ```bash
 sudo -i
 set -a; . /etc/minecraft/backup.env; set +a
-restic snapshots --host mc01 --tag survival --latest 3
-restic restore latest --host mc01 --tag survival --target /root/geri-yukleme-testi
+restic snapshots --host "$BACKUP_HOST" --tag survival --latest 3
+restic restore latest --host "$BACKUP_HOST" --tag survival --target /root/geri-yukleme-testi
 ls -la /root/geri-yukleme-testi/opt/minecraft/servers/survival/world
 du -sh /root/geri-yukleme-testi
 # Deponun bütünlüğü (verinin %5'ini okuyarak; uzak depoda indirme ücreti doğurabilir):
@@ -260,7 +279,7 @@ exit
 ```
 
 Aynı şeyi `velocity` (LibreLogin `user-data.db.yedek` dosyası orada mı?) ve `_mariadb`
-(`restic dump latest /mariadb.sql --tag _mariadb | head`) için de yapın. Diskte açılacak kadar
+(`restic dump --host "$BACKUP_HOST" --tag _mariadb latest /mariadb.sql | head`) için de yapın. Diskte açılacak kadar
 yer olduğundan emin olun (`df -h /`).
 
 Daha kapsamlı test: yılda birkaç kez küçük geçici bir VPS'e tüm ağı "makine kaybolursa"
@@ -270,8 +289,8 @@ adımlarıyla geri kurun.
 
 ```bash
 df -h /                                           # genel doluluk
-sudo du -sh /opt/minecraft/servers/* /var/backups/minecraft 2>/dev/null
-journalctl --disk-usage                           # günlükler (en çok 2 GB)
+sudo sh -c 'du -sh /opt/minecraft/servers/* /var/backups/minecraft' 2>/dev/null   # "*" root kabuğunda
+sudo journalctl --disk-usage                      # günlükler (en çok 2 GB; sudo'suz yalnız kendi günlüğünüz)
 sudo mc doctor                                    # %70 üstü uyarı, %90 üstü kritik
 sudo sh -c 'set -a; . /etc/minecraft/backup.env; set +a; restic stats --mode raw-data'
 ```

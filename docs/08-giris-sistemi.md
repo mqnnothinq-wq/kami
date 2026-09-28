@@ -45,8 +45,10 @@ Java oyuncusu (TCP 25565)                         Bedrock oyuncusu (UDP 19132)
 Adımlar:
 
 1. **Sonar** giriş paketini Velocity'nin ağ katmanında yakalar; botlar LibreLogin'e ve Mojang
-   sorgularına hiç ulaşmaz. Her yeni oyuncu ilk girişte doğrulanır ve "tekrar bağlan" mesajıyla
-   atılır; doğrulanmış oyuncular 5 gün hatırlanır.
+   sorgularına hiç ulaşmaz. Her yeni ad + IP çifti (premium oyuncular dahil; yalnız Bedrock/Geyser
+   bağlantıları atlanır) ilk girişte doğrulanır ve "tekrar bağlan" mesajıyla bir kez atılır;
+   doğrulanmış ad + IP çifti 5 gün hatırlanır. Aynı oyuncu başka bir IP'den gelirse (ör. mobil
+   veri) yeniden doğrulanır.
 2. **Floodgate** Bedrock oyuncularını tanır; LibreLogin onları doğrudan lobiye gönderir.
 3. **LibreLogin** ada bakar: veritabanında premium olarak kayıtlıysa ya da Mojang'da bu ad
    varsa (sonuç 10 dakika önbellekte) Velocity'ye bu bağlantı için **online modu** zorlatır.
@@ -213,22 +215,37 @@ her eklentinin kendi ayarından gelir. Duman testinin 7. maddesi bu düzeltmeyi 
 ## Duman testi (canlıya alma kapısı)
 
 Canlıya almadan önce ve **Velocity, Floodgate, Geyser, Sonar ya da LibreLogin her güncellendiğinde**
-tekrarlayın. Test sırasında `sudo mc log velocity`'yi ayrı bir pencerede izleyin.
+tekrarlayın. Test sırasında `sudo mc log velocity`'yi ayrı bir pencerede izleyin. Java testlerinde
+her yeni ad + IP çifti (premium dahil) ilk bağlantıda Sonar'ın "tekrar bağlan" mesajıyla bir kez
+atılır; bu bir başarısızlık değildir, tekrar bağlanın.
 
 | # | Test | Beklenen | Nasıl kontrol edilir |
 |---|---|---|---|
-| 1 | Premium 26.2 istemcisiyle bağlan | Doğrudan lobiye, "Premium hesabınla otomatik giriş yapıldı" | `sudo mc cmd velocity librelogin user info <ad>` → premium UUID dolu |
+| 1 | Premium 26.2 istemcisiyle bağlan | Sonar'ın ilk bağlantıdaki bir kerelik "tekrar bağlan"ından sonra doğrudan lobiye, "Premium hesabınla otomatik giriş yapıldı" | `sudo mc cmd velocity librelogin user info <ad>` → premium UUID dolu |
 | 2 | Premium bir adı cracked istemciyle kullan | **Atılır** (ad online moda ayrılmış) | Oyuna girememeli |
 | 3 | Yeni bir cracked adla bağlan | Sonar denetimi → tekrar bağlan → limbo → `/register` → lobi. Giriş öncesi `/server survival` ve sohbet engelli | Limbo'da `/server survival` dene |
-| 4 | Aynı cracked oyuncu 30 dk içinde aynı IP'den, sonra başka IP'den (ör. mobil veri) | Aynı IP: otomatik giriş; başka IP: şifre sorulur | — |
+| 4 | Aynı cracked oyuncu 30 dk içinde aynı IP'den, sonra başka IP'den (ör. mobil veri) | Aynı IP: otomatik giriş; başka IP: önce Sonar denetimi (tekrar bağlan), sonra şifre sorulur | — |
 | 5 | Bedrock (Geyser) ile bağlan | Şifresiz lobiye, adı `.Ad` | — |
 | 6 | 26.3 istemcisiyle bağlan | Limbo'ya ve lobiye ulaşır | — |
 | 7 | Adında büyük "I" olan premium bir test hesabıyla bağlan | Online moda zorlanır, otomatik giriş | Türkçe dil düzeltmesinin kanıtı |
 | 8 | `sudo mc restart velocity` | `config.conf` yeniden üretilmez; günlükte "Failed to check if player is coming from Floodgate" **yok** (bu satır herkesin "Internal LibreLogin error" ile reddedilmesi demektir) | `sudo mc log velocity` |
 
-Herhangi biri başarısızsa canlıya almayın: sorunu çözün ya da önceki (çalışan) jar'lara dönün
-([docs/04](04-guvenlik-ddos.md#güncelleme-politikası)). Test geçtiyse test ettiğiniz Velocity
-sürümünü `network.env`'de sabitleyin.
+Herhangi biri başarısızsa canlıya almayın: sorunu çözün ya da çalışan sürüme dönün. Yalnız
+Velocity çekirdeğinin eski kopyası saklanır (`server.jar.old`; geri alma:
+[docs/04](04-guvenlik-ddos.md#güncelleme-politikası)). Eklentilerin eski jar'ı **saklanmaz**
+(güncelleme üzerine yazar, Velocity yedeği jar'ları içermez):
+
+- **Floodgate, Geyser, Sonar:** çalıştığını bildiğiniz sürümün doğrudan indirme adresini
+  `config/plugins.list`'te `url` kaynağı ve 5. sütunda sha256 ile sabitleyin
+  ([docs/06](06-eklentiler.md#pluginslist-nasıl-çalışır)), sonra
+  `sudo mc download plugins velocity` ve `sudo mc restart velocity`.
+- **LibreLogin:** `plugins.list` satırını `/opt/minecraft/artifacts/` içindeki önceki jar'a
+  (`LibreLogin-<eski commit'in ilk 7 hanesi>.jar`) çevirin ve `network.env`'deki
+  `LIBRELOGIN_COMMIT`'i aynı commit'e geri alın; önceki jar artık yoksa
+  `sudo mc build-librelogin --commit <eski commit>` ile yeniden derleyin. Sonra yukarıdaki iki
+  komut.
+
+Test geçtiyse test ettiğiniz Velocity sürümünü `network.env`'de sabitleyin.
 
 ## Riskler ve önlemler
 

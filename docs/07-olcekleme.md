@@ -73,6 +73,9 @@ Sonra komutun yazdırdığı adımları uygulayın:
    sudo git -C /opt/minecraft/kami commit -m "Yeni sunucu: skyblock"
    ```
 
+   "Author identity unknown" hatası alırsanız git kimliğini bir kez tanımlayın
+   ([docs/02, 4. adım](02-kurulum.md#4-depoyu-indirin)).
+
 Oyuncular `/server skyblock` ile geçer. Yeni sunucu otomatik olarak saatlik yedeğe, günlük
 yeniden başlatmaya ve `mc start/stop all`'a dahil olur.
 
@@ -158,12 +161,24 @@ yeni modlar) ikinci makineye taşınır.** İki makine aynı veri merkezinde olm
    sudo ufw delete allow 19132/udp
    ```
 
-4. **LuckPerms veritabanı:** VDS2'deki LuckPerms, VDS1'deki MariaDB'ye bağlanmalıdır. VDS1'de
-   MariaDB'yi özel IP'ye bağlayıp (`bind-address`) yalnız VDS2'ye açın
-   (`ufw allow from <VDS2_IP> to any port 3306 proto tcp`), VDS2'nin IP'si için bir MariaDB
-   kullanıcısı tanımlayın; VDS2'nin `network.env` dosyasında `DB_HOST`'u VDS1'in IP'si, VDS2'nin
-   `secrets.env` dosyasında `DB_PASSWORD`'u o kullanıcının parolası yapın. MariaDB trafiği
-   şifresizdir: özel ağ yoksa iki makine arasına **WireGuard** tüneli kurun.
+   VDS2'de `mc doctor`'ın "UFW: 25565/tcp açık değil" ve "UFW: 19132/udp açık değil" **kritik**
+   satırları da bu düzende beklenen durumdur. install.sh'i yeniden çalıştırırsanız 25565/tcp ve
+   19132/udp kurallarını **yeniden ekler**; ardından iki `ufw delete` komutunu tekrarlayın.
+
+4. **LuckPerms veritabanı:** VDS2'deki LuckPerms, VDS1'deki MariaDB'ye bağlanmalıdır. VDS1'in
+   dalında `host/mariadb-minecraft.cnf` içinde `bind-address = 127.0.0.1,<VDS1_özel_IP>` yapın
+   (virgüllü liste MariaDB ≥ 10.11'de geçerlidir; `127.0.0.1` **kalmalı**, çünkü VDS1'in kendi
+   LuckPerms'ü `DB_HOST="127.0.0.1"` ile bağlanır) ve install.sh'i yeniden çalıştırın (dosyayı
+   `/etc/mysql/mariadb.conf.d/60-minecraft.cnf`'ye kopyalayıp MariaDB'yi yeniden başlatır;
+   `/etc` altındaki dosyayı elle düzenlerseniz install.sh bir sonraki çalışmada üzerine yazar).
+   Bu adres açılışta MariaDB'den önce hazır olmalıdır; WireGuard adresiyse
+   `sudo systemctl edit mariadb` ile `[Unit]` altına `Wants=wg-quick@wg0.service` ve
+   `After=wg-quick@wg0.service` ekleyin, yoksa MariaDB açılışta başlayamayabilir.
+   Portu yalnız VDS2'ye açın (`sudo ufw allow from <VDS2_IP> to any port 3306 proto tcp`),
+   VDS2'nin IP'si için bir MariaDB kullanıcısı tanımlayın; VDS2'nin `network.env` dosyasında
+   `DB_HOST`'u VDS1'in IP'si, VDS2'nin `secrets.env` dosyasında `DB_PASSWORD`'u o kullanıcının
+   parolası yapın. MariaDB trafiği şifresizdir: özel ağ yoksa iki makine arasına **WireGuard**
+   tüneli kurun.
 5. **Dünyayı taşıyın:** VDS1'de `sudo mc stop survival && sudo mc backup survival`. VDS2'ye aynı
    `backup.env` ve `restic.pass`'i koyun, `BACKUP_HOST=mc01` iken `sudo mc restore survival latest`,
    sonra VDS2'de `BACKUP_HOST=mc02` yapın (her makine kendi yedeklerini ayrı etiketlesin).
@@ -258,7 +273,8 @@ sunuculara girebildiği için acele etmeyin.
    `false` yazar; yine de kontrol edin:
 
    ```bash
-   sudo grep -H '^white-list' /opt/minecraft/servers/*/server.properties
+   # "*" root kabuğunda genişlemeli: servers/ yönetici kullanıcısına kapalıdır (0750).
+   sudo sh -c "grep -H '^white-list' /opt/minecraft/servers/*/server.properties"
    ```
 
 7. Duman testi ([docs/08](08-giris-sistemi.md#duman-testi-canlıya-alma-kapısı)) ve oyun testi
