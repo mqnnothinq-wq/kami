@@ -8,7 +8,7 @@
 #
 # Güvenlik: sunucu dizinleri minecraft kullanıcısınındır; orada çalışan (ya da ele geçirilmiş) bir
 # sunucu sembolik bağ bırakabilir. Bu yüzden root iken sunucu dizinlerindeki tüm okuma/yazmalar
-# minecraft kimliğiyle (setpriv) yapılır ve yolunda sembolik bağ olan hedef reddedilir.
+# minecraft kimliğiyle (setpriv, yoksa runuser) yapılır ve yolunda sembolik bağ olan hedef reddedilir.
 #
 # Test/ortam değişkenleri: YQ (mikefarah yq yolu), MC_SYSTEMD_DIR (drop-in kökü),
 # MC_NO_SYSTEMD=1 (systemctl çağrılmaz) + lib.sh'deki MC_ROOT, MC_ETC, MC_USER.
@@ -70,10 +70,12 @@ trap cleanup EXIT
 # Komutu sunucu dosyalarının sahibi olarak çalıştırır (root değilsek olduğu gibi).
 # Sembolik bağ izlense bile minecraft'ın zaten erişebildiğinden fazlasına ulaşılamaz.
 as_mc() {
-    if ((IS_ROOT)); then
+    if ((!IS_ROOT)); then
+        "$@"
+    elif command -v setpriv >/dev/null 2>&1; then
         (cd / && exec setpriv --reuid="$MC_USER" --regid="$MC_GROUP" --init-groups -- "$@")
     else
-        "$@"
+        (cd / && exec runuser -u "$MC_USER" -- "$@")
     fi
 }
 
@@ -609,7 +611,7 @@ main() {
         { id -u "$MC_USER" && getent group "$MC_USER"; } >/dev/null 2>&1 \
             || die "Kullanıcı/grup yok: $MC_USER — önce scripts/install.sh çalıştırın."
         MC_GROUP=$(id -gn "$MC_USER")
-        require_cmd setpriv
+        command -v setpriv >/dev/null 2>&1 || require_cmd runuser
     fi
     if ((!DRY_RUN)); then
         [[ -d $MC_ROOT ]] || die "$MC_ROOT yok — önce scripts/install.sh çalıştırın."

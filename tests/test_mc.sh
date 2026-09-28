@@ -281,7 +281,7 @@ check "status lobby satırı (tür, port, durum, RSS, heap)" \
     grep -qE '^lobby +paper +30066 +active \(running\) +1\.0G +1536M$' <<<"$OUT"
 check "status survival kapalı, RSS '-'" grep -qE '^survival +paper +30067 +inactive \(dead\) +- +7G$' <<<"$OUT"
 check "status sırası velocity önce" eq "$(sed -n '2p' <<<"$OUT" | awk '{print $1}')" velocity
-check "status limbo satırı (heap yok)" grep -qE '^limbo +limbo +30065 +inactive \(dead\) +- +-$' <<<"$OUT"
+check "status limbo satırı (heap yok)" grep -qE '^limbo +limbo +30065 +[a-z]+ \([a-z-]+\) +[0-9.GM-]+ +-$' <<<"$OUT"
 mc status lobby
 check "status tek sunucu" eq "$(wc -l <<<"$OUT")" 2
 mc log lobby
@@ -382,7 +382,12 @@ cp "$T/survival.env.bak" "$REPO/config/servers/survival/server.env"
 echo "# countdown: yedek kilidi tutuluyorsa yeniden başlatma yapılmaz"
 : >"$RCON_LOG"
 : >"$FAKE_LOG"
-flock "$T/root/.backup.lock" sleep 30 &
+# Kilidi tutan tek süreç sleep olsun (exec): kill onu ve kilidi birlikte bitirir.
+(
+    exec 9>>"$T/root/.backup.lock"
+    flock 9
+    exec sleep 30
+) &
 LOCK_PID=$!
 for ((i = 0; i < 50; i++)); do
     if ! flock -n "$T/root/.backup.lock" true; then break; fi
@@ -666,7 +671,9 @@ printf '[{"time":"%s","hostname":"mc01","paths":["/opt/minecraft/servers/surviva
 EOF
 chmod +x "$T/bin/java" "$T/bin/ufw" "$T/bin/ss" "$T/bin/restic"
 printf "RESTIC_REPOSITORY='/var/backups/minecraft/restic'\nRESTIC_PASSWORD_FILE=/dev/null\n" >"$T/etc/backup.env"
+mkdir -p "$T/root/servers/limbo" && : >"$T/root/servers/limbo/pico_limbo"
 MC_JAVA_BIN="$T/bin/java" mc doctor
+check "doctor limbo pico_limbo var → TAMAM" out_has "[TAMAM] limbo: pico_limbo var."
 check "doctor Java 25 TAMAM" out_has "[TAMAM] Java 25.0.1"
 check "doctor UFW etkin" out_has "[TAMAM] UFW etkin."
 check "doctor UFW 25565/tcp açık" out_has "[TAMAM] UFW: 25565/tcp açık."

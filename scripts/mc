@@ -29,8 +29,9 @@ Kurulum ve yapılandırma:
   download [--dry-run] [all|core|plugins] [sunucu]
                                          Paper/Velocity ve eklentileri indirir
   apply [--dry-run] [sunucu|all]         config/ ağacını sunuculara uygular
-  init <sunucu|all> --accept-eula        ilk kurulum: EULA, config, ilk açılış,
-                                         init-commands.txt, config'i yeniden uygula
+  init <sunucu|all> --accept-eula        ilk kurulum: EULA, config, ilk açılış, config'i
+                                         yeniden uygula, ikinci açılışta init-commands.txt
+                                         (limbo: yalnız açılış + port denetimi)
   new-server <ad> <port> <heap> [--from survival]
                                          yeni backend sunucusu tanımlar
 
@@ -95,10 +96,12 @@ MC_GROUP=""
 # Komutu sunucu dosyalarının sahibi olarak çalıştırır (root değilsek olduğu gibi). Sunucu
 # dizinleri minecraft'ındır; oradaki bir sembolik bağ root yetkisiyle izlenmemelidir.
 as_mc() {
-    if ((IS_ROOT)); then
+    if ((!IS_ROOT)); then
+        "$@"
+    elif command -v setpriv >/dev/null 2>&1; then
         (cd / && exec setpriv --reuid="$MC_USER" --regid="${MC_GROUP:-$MC_USER}" --init-groups -- "$@")
     else
-        "$@"
+        (cd / && exec runuser -u "$MC_USER" -- "$@")
     fi
 }
 
@@ -627,7 +630,7 @@ cmd_init() {
     { id -u "$MC_USER" && getent group "$MC_USER"; } >/dev/null 2>&1 \
         || die "Kullanıcı/grup yok: $MC_USER — önce scripts/install.sh çalıştırın."
     MC_GROUP=$(id -gn "$MC_USER")
-    require_cmd setpriv
+    command -v setpriv >/dev/null 2>&1 || require_cmd runuser
 
     mapfile -t targets <<<"$list"
 

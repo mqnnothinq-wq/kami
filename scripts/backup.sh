@@ -220,7 +220,7 @@ snapshot_librelogin_db() { # <sunucu-dizini>
         log_error "$db düzenli dosya değil (sembolik bağ?); tutarlı kopya alınmadı."
         return 1
     fi
-    if ! as_mc python3 -c "$SQLITE_SNAPSHOT_PY" "$db" "$db$LL_SNAP_SUFFIX"; then
+    if ! as_mc python3 -I -c "$SQLITE_SNAPSHOT_PY" "$db" "$db$LL_SNAP_SUFFIX"; then
         log_error "LibreLogin veritabanının tutarlı kopyası alınamadı ($db)."
         return 1
     fi
@@ -484,7 +484,7 @@ cmd_restore() {
     rm -rf -- "$stage"
     carry_over "$type" "${aside:-}" "$dir"
     if [[ ${EUID:-$(id -u)} -eq 0 ]] && id -u "$MC_USER" >/dev/null 2>&1; then
-        chown -R "$MC_USER:$MC_USER" -- "$dir"
+        chown -R -- "$MC_USER:" "$dir" # "kullanıcı:" = kullanıcının birincil grubu
     fi
     chmod 0750 -- "$dir"
     if [[ $type == velocity ]]; then promote_librelogin_db "$dir"; fi

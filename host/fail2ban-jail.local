@@ -1,4 +1,5 @@
-# Kurulum yeri: /etc/fail2ban/jail.local
+# Kurulum yeri: /etc/fail2ban/jail.d/minecraft.conf  (install.sh kopyalar)
+# Yöneticinin /etc/fail2ban/jail.local dosyasına dokunulmaz; oradaki değerler bunları geçersiz kılar.
 # Debian 12+'da rsyslog/auth.log yok: günlükler journald'dan okunur (python3-systemd gerekir).
 # Yasaklar UFW ile uygulanır.
 [DEFAULT]

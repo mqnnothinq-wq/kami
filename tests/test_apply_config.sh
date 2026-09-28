@@ -164,6 +164,7 @@ check "limbo 30-exec.conf sırası: sıfırlama önce" test "$(grep '^ExecStart=
 check "limbo 20-resources.conf CPUWeight=50" line_is "$LD/20-resources.conf" "CPUWeight=50"
 check "limbo 20-resources.conf OOMScoreAdjust=300" line_is "$LD/20-resources.conf" "OOMScoreAdjust=300"
 check "limbo server.toml @@PORT@@ işlendi" line_is "$L/server.toml" 'bind = "127.0.0.1:30065"'
+# shellcheck disable=SC2016  # ${…} bilerek genişletilmez: dosyada birebir durmalı
 check "limbo server.toml PicoLimbo'nun kendi \${…} yer tutucusu korundu" line_is "$L/server.toml" 'secret = "${VELOCITY_FORWARDING_SECRET}"'
 check "paper'a 30-exec.conf yazılmadı" test ! -e "$T/systemd/mc@lobby.service.d/30-exec.conf"
 check "velocity'ye 30-exec.conf yazılmadı" test ! -e "$T/systemd/mc@velocity.service.d/30-exec.conf"

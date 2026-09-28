@@ -38,7 +38,7 @@ Kullanım: sudo scripts/install.sh [seçenekler]
   --java=temurin     Java 25: Adoptium temurin-25-jre (varsayılan)
   --java=openjdk     Java 25: dağıtımın openjdk-25-jre paketi (Ubuntu 24.04)
   --no-swap          swap yoksa bile 2G swap dosyası oluşturma
-  --harden-ssh       SSH'ta parola girişini kapat (yalnız authorized_keys'te anahtar varsa)
+  --harden-ssh       SSH'ta parola girişini kapat (yalnız sizin authorized_keys'inizde anahtar varsa)
   -h, --help         bu yardım
 
 Desteklenen: Ubuntu 24.04, Debian 12/13 (x86_64). Tekrar çalıştırmak güvenlidir.
@@ -183,6 +183,10 @@ preflight() {
     fi
     if [[ $MC_ROOT != /opt/minecraft ]]; then
         log_warn "MC_ROOT=$MC_ROOT: systemd birimleri /opt/minecraft bekler (yalnızca test için değiştirin)."
+    fi
+    # Paper, çalışma dizini yolunda '!' ya da '+' varsa açılmaz (§16).
+    if [[ $SERVERS_DIR == *['!+']* ]]; then
+        die "Sunucu dizini yolu '!' ya da '+' içeriyor: $SERVERS_DIR (Paper bu yolda açılmaz; MC_ROOT'u değiştirin)."
     fi
     [[ -d $REPO_DIR/systemd && -d $REPO_DIR/host ]] || die "Depo eksik: $REPO_DIR/systemd ve $REPO_DIR/host gerekli."
     if ((HARDEN_SSH)); then check_ssh_keys; fi # kurulumun sonunda değil, başta reddet
@@ -329,6 +333,8 @@ setup_user_dirs() {
     fi
     run install -d -m 0755 -o root -g root "$MC_ROOT"
     run install -d -m 0750 -o "$MC_USER" -g "$MC_USER" "$SERVERS_DIR"
+    # Yerelde derlenen eklentiler (plugins.list "local" kaynağı, ör. LibreLogin): yalnız root yazar.
+    run install -d -m 0755 -o root -g root "$MC_ROOT/artifacts"
 }
 
 setup_timezone() {
@@ -445,9 +451,16 @@ setup_firewall() {
     ((DRY_RUN)) || log_ok "UFW etkin: SSH (${ssh_ports[*]}), ${PUBLIC_JAVA_PORT:-25565}/tcp, ${PUBLIC_BEDROCK_PORT:-19132}/udp"
 }
 
+# Ayarlarımız jail.d/minecraft.conf'a gider: yöneticinin jail.local'ına ve eklediği hapislere dokunulmaz,
+# jail.local'daki değerler (ör. ignoreip) bizimkileri geçersiz kılar (fail2ban .conf'tan sonra .local okur).
+F2B_CONF=/etc/fail2ban/jail.d/minecraft.conf
 setup_fail2ban() {
     step "fail2ban"
-    install_file "$REPO_DIR/host/fail2ban-jail.local" /etc/fail2ban/jail.local
+    install_file "$REPO_DIR/host/fail2ban-jail.local" "$F2B_CONF"
+    if [[ -f /etc/fail2ban/jail.local ]] && grep -q '^# Kurulum yeri: /etc/fail2ban/jail.local' /etc/fail2ban/jail.local; then
+        log_warn "/etc/fail2ban/jail.local önceki bir kami kurulumundan kalmış; ayarlar artık $F2B_CONF içinde."
+        log_warn "  Kendi değişikliğiniz yoksa silin: rm /etc/fail2ban/jail.local && systemctl restart fail2ban"
+    fi
     sysd enable --now fail2ban
     if ((FILE_CHANGED)); then sysd restart fail2ban; fi
 }
@@ -618,18 +631,24 @@ has_authorized_key() { # <kullanıcı>
             "$home/.ssh/authorized_keys"
 }
 
-# Parola girişi kapanmadan önce çağıran sudo kullanıcısında ya da root'ta anahtar olmalı.
+# Parola girişi kapanmadan önce, betiği çalıştıran yöneticinin KENDİ anahtarı olmalı: sudo ile
+# çalıştırıldıysa SUDO_USER, değilse root; oturumun giriş kullanıcısı (logname, ör. su ile) da.
+# Başka bir hesabın (ör. sağlayıcının root'a koyduğu) anahtarı yetmez.
 check_ssh_keys() {
-    local u ok=0
-    local -a users=(root)
-    if [[ -n ${SUDO_USER:-} && $SUDO_USER != root ]]; then users+=("$SUDO_USER"); fi
+    local u login
+    local -a users=() missing=()
+    if [[ -n ${SUDO_USER:-} && $SUDO_USER != root ]]; then users+=("$SUDO_USER"); else users+=(root); fi
+    login=$(logname 2>/dev/null || true)
+    if [[ -n $login && $login != root && $login != "${users[0]}" ]]; then users+=("$login"); fi
     for u in "${users[@]}"; do
         if has_authorized_key "$u"; then
-            ok=1
             log_ok "SSH anahtarı bulundu: $u"
+        else
+            missing+=("$u")
         fi
     done
-    ((ok)) || die "--harden-ssh reddedildi: ${users[*]} için authorized_keys'te anahtar yok (parola girişi kapanınca kilitlenirsiniz)."
+    ((${#missing[@]} == 0)) ||
+        die "--harden-ssh reddedildi: ${missing[*]} için authorized_keys'te anahtar yok (parola girişi kapanınca kilitlenirsiniz). Önce anahtarınızı ekleyip anahtarla girebildiğinizi doğrulayın."
 }
 
 harden_ssh() {
