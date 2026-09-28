@@ -12,8 +12,10 @@ yazılır. Şifre verilmezse ortam değişkeni RCON_PASSWORD kullanılır.
 Protokol (https://minecraft.wiki/w/RCON):
     int32le uzunluk | int32le istek-id | int32le tip | gövde (UTF-8) | 0x00 0x00
     tip 3 = giriş, tip 2 = komut, tip 0 = yanıt. Giriş reddedilirse id = -1 döner.
-    Sunucu uzun yanıtları 4096 *karakterlik* parçalara böler (UTF-8'de bayt
-    sayısı daha fazla olabilir; Türkçe karakterler 2 bayttır).
+    Sunucu uzun yanıtları 4096 karakterlik parçalara böler ve her read()'de tek
+    paket okur. Yanıtın bittiğini anlamak için ilk parça geldikten sonra geçersiz
+    tipte bir işaret paketi gönderilir; sunucu paketleri sırayla işlediğinden
+    işaretin yanıtı ("Unknown request c8") komut yanıtının sonunu gösterir.
 """
 
 import argparse
@@ -25,8 +27,8 @@ import sys
 TYPE_RESPONSE = 0
 TYPE_COMMAND = 2
 TYPE_LOGIN = 3
-CHUNK_CHARS = 4096          # sunucunun tek pakette gönderdiği en çok karakter
-MAX_PACKET = CHUNK_CHARS * 4 + 10   # UTF-8'de karakter başına en çok 4 bayt
+TYPE_MARKER = 200           # geçersiz tip: yanıt sonu işareti
+MAX_PACKET = 4096 * 4 + 10  # 4096 karakter, UTF-8'de karakter başına en çok 4 bayt
 MAX_COMMAND_BYTES = 1446    # sunucunun kabul ettiği en uzun komut gövdesi
 
 
@@ -66,7 +68,6 @@ def _recv(sock):
 
 class Rcon:
     def __init__(self, host, port, password, timeout=10.0):
-        self.timeout = timeout
         self.sock = socket.create_connection((host, port), timeout=timeout)
         self._next_id = 1
         req_id = self._id()
@@ -85,25 +86,21 @@ class Rcon:
             raise RconError(f"komut çok uzun (en fazla {MAX_COMMAND_BYTES} bayt)")
         req_id = self._id()
         _send(self.sock, req_id, TYPE_COMMAND, cmd)
-        parts = []
+        resp_id, _, body = _recv(self.sock)
+        if resp_id != req_id:
+            raise RconError(f"beklenmeyen yanıt id'si: {resp_id}")
+        parts = [body]
+        # İşaret ancak ilk parça geldikten sonra gönderilir: sunucu komutu
+        # çalıştırıp tüm parçaları yazdıktan sonra bir sonraki paketi okur.
+        marker_id = self._id()
+        _send(self.sock, marker_id, TYPE_MARKER, "")
         while True:
             resp_id, _, body = _recv(self.sock)
+            if resp_id == marker_id:
+                break
             if resp_id != req_id:
                 raise RconError(f"beklenmeyen yanıt id'si: {resp_id}")
             parts.append(body)
-            # Tam dolu bir parça, arkasından devamı gelebileceği anlamına gelir;
-            # kısa süre içinde yeni veri gelmezse yanıt bitmiştir.
-            if len(body) < CHUNK_CHARS:
-                break
-            self.sock.settimeout(0.5)
-            try:
-                more = self.sock.recv(1, socket.MSG_PEEK)
-            except socket.timeout:
-                more = b""
-            finally:
-                self.sock.settimeout(self.timeout)
-            if not more:
-                break
         return "".join(parts)
 
     def close(self):
