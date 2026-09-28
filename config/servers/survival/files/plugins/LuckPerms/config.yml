@@ -1,0 +1,24 @@
+# LuckPerms (Paper backend) — config.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+# Eklenti dosyayı ilk açılışta üretir; "mc apply" ondan sonra bunları birleştirir.
+# Proxy ve tüm backend'ler AYNI MariaDB veritabanını kullanır: izinler her yerde aynı.
+
+# Sunucu adı (lobby/survival/...): "server" bağlamındaki izinler için.
+server: '@@SERVER_NAME@@'
+
+# Sunucunun kendi UUID önbelleği/Mojang sorgusu KULLANILMASIN: karma girişte UUID'ler
+# LibreLogin'den gelir, Mojang UUID'si yanlış olur. Oyuncu bir kez girdikten sonra adla çalışır.
+use-server-uuid-cache: false
+
+# Ortak MariaDB (yalnız 127.0.0.1). Şifre /etc/minecraft/secrets.env'den gelir.
+storage-method: mariadb
+data:
+  address: '@@DB_HOST@@:@@DB_PORT@@'
+  database: luckperms
+  username: '@@DB_USER@@'
+  password: '@@DB_PASSWORD@@'
+
+# Değişiklikler proxy üzerinden eklenti mesajlarıyla anında yayılır (LuckPerms proxy'de de kurulu).
+messaging-service: pluginmsg
+
+# Bedrock (Floodgate) adları "." ile başlar ve normalde geçersiz sayılır; izin verilsin.
+allow-invalid-usernames: true

@@ -1,0 +1,32 @@
+# Lobi — ilk kurulumda (mc init lobby) RCON ile SIRAYLA çalıştırılan sunucu komutları.
+# Satır başına bir komut, baştaki "/" yok; '#' ile başlayan satırlar yorumdur.
+# Oyun kuralları 26.x'te "minecraft:" önekli ve DÜNYA BAŞINA: RCON/konsol komutu ana dünyaya
+# (overworld) uygulanır. Lobide Nether/End kapalı olduğundan bu yeterli.
+# Eski camelCase adlar (doMobSpawning vb.) 26.x'te ÇALIŞMAZ.
+# Önekli biçim reddedilirse ("Unknown or incomplete command") öneksiz deneyin:
+#   gamerule spawn_mobs false
+
+# Doğal mob doğması kapalı (oynanışı değiştirir).
+gamerule minecraft:spawn_mobs false
+# Canavar doğması kapalı (26.x'te server.properties'ten oyun kuralına taşındı).
+gamerule minecraft:spawn_monsters false
+# Gün döngüsü durur; saat aşağıda sabitlenir (oynanışı değiştirir).
+gamerule minecraft:advance_time false
+# Hava değişmez (oynanışı değiştirir).
+gamerule minecraft:advance_weather false
+# Rastgele tick yok: bitki büyümesi, yaprak çürümesi, buz erimesi vb. durur; CPU tasarrufu.
+gamerule minecraft:random_tick_speed 0
+# Uykusuzluk fantomları yok.
+gamerule minecraft:spawn_phantoms false
+# Ateş yayılmaz (0 = kapalı).
+gamerule minecraft:fire_spread_radius_around_player 0
+# Oyuncular birbirine vuramaz (26.x'te server.properties'ten oyun kuralına taşındı).
+gamerule minecraft:pvp false
+# Lobide düşme hasarı yok (parkur/zıplama alanlarında oyuncu ölmesin).
+gamerule minecraft:fall_damage false
+
+# Saati öğlene sabitle. 26.1'den beri "/time set day" adları veri paketindeki zaman
+# işaretçilerine bağlı; sayı her zaman geçerli (6000 = öğle, 1000 = sabah).
+time set 6000
+# Açık hava.
+weather clear

@@ -1,0 +1,23 @@
+# Sonar (anti-bot, Velocity) — config.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+# Sonar dosyayı ilk açılışta plugins/sonar/ altında üretir; "mc apply" ondan sonra bunları
+# birleştirir. İlk giriş akışı: Sonar doğrulaması → "tekrar bağlan" → limbo → /register.
+general:
+  # Oyuncu IP'leri konsola yazılmasın (KVKK).
+  log-player-addresses: false
+  # Aynı IP'den en fazla 5 oyuncu (varsayılan 3): mobil CGNAT ve internet kafeler.
+  max-online-per-ip: 5
+database:
+  # Doğrulanmış oyuncular yeniden başlatmada unutulmasın: yerel H2 dosyası (verified_players).
+  # IP'ler düz metin saklanır; dosya yalnız minecraft kullanıcısınca okunur.
+  type: H2
+  # Kayıt saklama süresi (gün). KVKK: kısa tutuldu.
+  maximum-age: 5
+verification:
+  # Her yeni oyuncu doğrulansın (yalnız saldırı sırasında değil).
+  timing: ALWAYS
+  # Bedrock (Geyser) oyuncuları atlanır: adlarındaki "." Sonar'ın ad desenine uymaz.
+  check-geyser-players: false
+  transfer:
+    # Doğrulamadan sonra Transfer paketi yok; oyuncu kendisi tekrar bağlanır
+    # (velocity.toml accepts-transfers = false ile tutarlı).
+    enabled: false

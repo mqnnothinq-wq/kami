@@ -1,0 +1,21 @@
+# LuckPerms (Velocity) — config.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+# Eklenti dosyayı ilk açılışta üretir; "mc apply" ondan sonra bunları birleştirir.
+# Proxy ve tüm backend'ler AYNI MariaDB veritabanını kullanır: izinler her yerde aynı.
+
+# Sunucu adı: "server" bağlamındaki izinler için (ör. /lp user X permission set a.b server=velocity).
+server: '@@SERVER_NAME@@'
+
+# Ortak MariaDB (yalnız 127.0.0.1). Şifre /etc/minecraft/secrets.env'den gelir.
+storage-method: mariadb
+data:
+  address: '@@DB_HOST@@:@@DB_PORT@@'
+  database: luckperms
+  username: '@@DB_USER@@'
+  password: '@@DB_PASSWORD@@'
+
+# Değişiklikler proxy üzerinden eklenti mesajlarıyla anında tüm sunuculara yayılır
+# (tek proxy için en basit yöntem).
+messaging-service: pluginmsg
+
+# Bedrock (Floodgate) adları "." ile başlar ve normalde geçersiz sayılır; izin verilsin.
+allow-invalid-usernames: true

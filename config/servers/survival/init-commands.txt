@@ -1,0 +1,29 @@
+# Ana sunucu — ilk kurulumda (mc init survival) RCON ile SIRAYLA çalıştırılan sunucu komutları.
+# Satır başına bir komut, baştaki "/" yok; '#' ile başlayan satırlar yorumdur.
+# Oyun modu henüz seçilmediği için vanilla oyun kuralları DEĞİŞTİRİLMEDİ (ör. spawn_phantoms açık).
+# Şu an etkin komut YOK; aşağıdakiler hazır örneklerdir.
+# Oyun kuralı adları 26.x'te "minecraft:" önekli ve dünya başınadır (ör. gamerule minecraft:keep_inventory true).
+
+# --- Dünya sınırı (örnek) ---
+# Sınır, oyuncuların sonsuz yeni arazi üretmesini (CPU + disk) engeller. "set" değeri ÇAPTIR:
+# 10000 = merkezden her yöne 5000 blok.
+#worldborder center 0 0
+#worldborder set 10000
+
+# --- Chunky ile dünya ön-üretimi (pregen) ---
+# Oyuncular gelmeden ÖNCE sınır içindeki arazi üretilirse oyun sırasında parça üretme yükü olmaz.
+# "mc init" komutlardan hemen sonra sunucuyu DURDURUR, ön-üretim ise dakikalar/saatler sürer;
+# bu yüzden bunlar burada etkin değil. Sunucu çalışırken tek tek elle verin
+# (mc rcon survival "<komut>"). Oyuncu yokken çalıştırın, ilerlemeyi "chunky progress" ile
+# izleyin; "chunky pause" / "chunky continue" ile durdurup sürdürebilirsiniz.
+# Dünya adlarını önce "chunky world" sekme tamamlamasıyla doğrulayın (26.x'te tüm boyutlar
+# tek world/ klasöründe; Nether'in Bukkit dünya adı farklı olabilir).
+#chunky world world
+#chunky shape square
+#chunky center 0 0
+#chunky radius 5000
+#chunky start
+# Nether için yarıçapın 1/8'i (Nether'de 1 blok = Overworld'de 8 blok):
+#chunky world <nether-dunya-adi>
+#chunky radius 625
+#chunky start

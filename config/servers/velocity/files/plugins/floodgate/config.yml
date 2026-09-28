@@ -1,0 +1,13 @@
+# Floodgate (Velocity) — config.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+# Floodgate dosyayı ilk açılışta plugins/floodgate/ altında üretir; "mc apply" ondan sonra
+# bunları birleştirir.
+# NOT: Proxy'de ayrı bir "proxy-config.yml" dosyası OLUŞMAZ; o, Floodgate'in kendi içindeki
+# şablondur ve send-floodgate-data anahtarını bu config.yml'e ekler (ConfigLoader.java).
+player-link:
+  # Java-Bedrock hesap bağlama KAPALI: bağlı Bedrock oyuncusu Java hesabının Mojang UUID'siyle
+  # girerdi; oysa karma girişte Java tarafı offline (CRACKED) UUID kullanıyor → aynı kişi iki
+  # ayrı kimlik olurdu. Açmadan önce bilinçli karar verin.
+  enabled: false
+# Bedrock oyuncu verisini backend'lere gönderme: Floodgate yalnız proxy'de kurulu.
+# (true yapılırsa Floodgate'i olmayan backend Bedrock oyuncularını atar.)
+send-floodgate-data: false

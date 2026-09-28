@@ -1,0 +1,57 @@
+# Eklenti listesi — scripts/download.sh (mc download plugins) bunu okur.
+# Biçim: boşlukla ayrılmış sütunlar; '#' sonrası yorum.
+#   sunucular  ad  kaynak  kimlik  [sha256]
+# sunucular : virgüllü sunucu adları, "backends" (tüm Paper sunucuları; mc new-server ile
+#             eklenenler dahil) ya da "all".
+# ad        : plugins/<ad>.jar dosya adı (aynı sunucuda bir kez).
+# kaynak    : geysermc | luckperms | modrinth | hangar | github | url | local (SPEC §14, §17)
+# Yeni sürüm plugins/update/ altına iner, bir sonraki yeniden başlatmada devreye girer.
+# Yalnız resmî kaynaklar! "Crack"lenmiş/sızdırılmış ücretli eklentiler arka kapı içerir.
+#
+# sunucular        ad            kaynak      kimlik                                        [sha256]
+
+# --- Proxy (Velocity) ---------------------------------------------------------------------------
+# Bedrock (mobil/konsol/Win10) oyuncularının girişi: UDP 19132.
+velocity           Geyser        geysermc    geyser/velocity
+# Bedrock oyuncuları Java hesabı olmadan girer (".Ad" önekiyle). Yalnız proxy'de yeterli.
+velocity           Floodgate     geysermc    floodgate/velocity
+# İzinler; proxy + tüm backend'ler ortak MariaDB kullanır.
+velocity           LuckPerms     luckperms   velocity
+# Bot saldırılarına karşı ilk giriş doğrulaması. Varlık adı Sonar derleme dosyasından
+# (shadowJar archiveFileName "Sonar-Velocity.jar", CI artefaktı aynı ad).
+velocity           Sonar         github      jonesdevelopment/sonar:Sonar-Velocity.jar
+# Karma giriş (premium otomatik, cracked /register-/login). Yayınlanmış 26.x sürümü yok:
+# scripts/build-librelogin.sh sabit commit'ten (network.env LIBRELOGIN_COMMIT) derler ve
+# $MC_ROOT/artifacts/LibreLogin-<commit7>.jar olarak saklar (SPEC §17). Dosya adındaki 7 hane
+# LIBRELOGIN_COMMIT'in ilk 7 hanesidir: commit'i değiştirirseniz bu satırı da güncelleyin.
+velocity           LibreLogin    local       $MC_ROOT/artifacts/LibreLogin-39397c4.jar
+# Profil aracı. Paper spark'ı zaten içinde getirir (backend'lere KURMAYIN); Velocity'de ayrı eklenti gerekir.
+velocity           spark         modrinth    spark
+
+# --- Backend'ler (Paper) --------------------------------------------------------------------------
+backends           LuckPerms     luckperms   bukkit
+# 26.3 istemcilerinin 26.2 sunucuya girebilmesi için ZORUNLU. ViaVersion ekibi eklentileri
+# için Hangar'ı gösteriyor (README: "Hangar (for our plugins)").
+backends           ViaVersion    hangar      ViaVersion
+# Dünya ön-üretimi (pregen) ve sınır; yalnız ana sunucu. Kullanımı: survival/init-commands.txt
+survival           Chunky        modrinth    chunky
+
+# --- İsteğe bağlı örnekler (etkinleştirmek için baştaki '#' işaretini kaldırın) ------------------
+# Eski istemciler (1.21.x vb.) için ViaVersion eki:
+#backends          ViaBackwards  hangar      ViaBackwards
+# Yönetici düzenleme aracı (WorldGuard bunlardan birini ister). FAWE daha hızlıdır:
+#survival          FastAsyncWorldEdit hangar FastAsyncWorldEdit
+#survival          WorldEdit     modrinth    worldedit
+# Bölge koruması (spawn vb.):
+#backends          WorldGuard    modrinth    worldguard
+# Blok kayıt/geri alma (CoreProtect): 26.2 desteği v24.1 ile geldi, indirme bağlantısı Patreon
+# gönderisinde → otomatik indirilemez. Elle indirip SHA-256'sını alın, "url" satırı yazın:
+#survival          CoreProtect   url         https://<elle-alinan-adres>/CoreProtect-24.1.jar   <sha256>
+# EssentialsX: kararlı 2.22.0 yalnız 26.1.2'yi hedefliyor; 26.2 için dev build (essentialsx.net)
+# elle indirilip "url" + sha256 ile eklenmeli. GitHub varlık adı sürüm içerdiği için "github"
+# kaynağı sabit adla çalışmaz.
+#survival          EssentialsX   url         https://<dev-build-adresi>/EssentialsX-2.23.0-dev.jar   <sha256>
+# Sekme listesi / isim etiketi (Velocity + backend):
+#velocity          TAB           modrinth    tab-was-taken
+# Özel görünüm (skin) — cracked oyuncuların skin'i için:
+#velocity          SkinsRestorer modrinth    skinsrestorer

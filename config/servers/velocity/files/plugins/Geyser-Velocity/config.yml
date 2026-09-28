@@ -1,0 +1,15 @@
+# Geyser (Velocity) — config.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+# Geyser dosyayı ilk açılışta plugins/Geyser-Velocity/ altında üretir; "mc apply" ondan sonra
+# bunları birleştirir. Bedrock portu varsayılan 19132/UDP (network.env PUBLIC_BEDROCK_PORT) kalır.
+java:
+  # Bedrock oyuncuları Floodgate ile doğrulanır (Java hesabı gerekmez). Floodgate kuruluyken
+  # Geyser bunu kendisi de seçer; açıkça yazıldı.
+  auth-type: floodgate
+# Oyuncu IP'leri günlüğe yazılmasın (KVKK: veri en aza indirme).
+log-player-ip-addresses: false
+# İstemcinin dili bulunamazsa Türkçe kullan (JVM dili bilerek İngilizce olduğundan
+# "system" İngilizce olurdu).
+default-locale: tr_tr
+gameplay:
+  # Bedrock duraklatma/ayarlar menüsünde görünen sunucu adı.
+  server-name: Kami Minecraft Ağı

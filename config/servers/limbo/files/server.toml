@@ -1,0 +1,61 @@
+# PicoLimbo (v1.14.1+mc26.3) — giriş bekleme sunucusu yapılandırması.
+# Cracked oyuncular /register ya da /login yapana kadar burada, boşlukta bekler.
+# TAM dosya: "mc apply limbo" her seferinde bunu geri yazar.
+# UYARI 1: PicoLimbo bilinmeyen anahtarda AÇILMAZ (deny_unknown_fields); yalnız belgelenmiş
+#          anahtarları kullanın.
+# UYARI 2: PicoLimbo dosyanın TAMAMINDA (yorumlar dahil) dolar-süslü-parantez ortam yer
+#          tutucularını açar; yorumlara bu biçimde metin YAZMAYIN (tanımsızsa açılmaz).
+
+# Yalnız 127.0.0.1: dışarıdan erişilebilen bir limbo, girişi atlatmanın klasik yoludur.
+bind = "127.0.0.1:@@PORT@@"
+# Oyuncu dünyaya girince gösterilen sohbet mesajı (MiniMessage). PicoLimbo metni XML gibi
+# ayrıştırır: bilinmeyen <etiket> SİLİNİR, bu yüzden yer tutucular [köşeli parantez] ile yazıldı.
+welcome_message = "<yellow>Hoş geldin! <white>Kayıtlıysan <aqua>/login [şifre]</aqua>, yeniysen <aqua>/register [şifre] [şifre]</aqua>"
+# Aksiyon çubuğu mesajı; boş = kapalı (LibreLogin kendi başlığını gösteriyor).
+action_bar = ""
+# İzleyici modu: oyuncu hiçbir şeye dokunamaz.
+default_game_mode = "spectator"
+hardcore = false
+# Mojang'dan skin çekme (limbo'dan dışarı istek yok).
+fetch_player_skins = false
+# F3 ekranında koordinat vb. gizle.
+reduced_debug_info = true
+# Başka sunuculardan transfer kabul etme.
+accept_transfers = false
+
+[connection]
+# Canlı tutma (keep-alive) paketi aralığı (sn). Vanilla 15; proxy okuma zaman aşımına
+# (30 sn) karşı daha güvenli olsun diye 10.
+keep_alive_interval_seconds = 10
+# Desteklenmeyen istemci sürümlerini en yeni protokolle deneme (anlık sürümler için); kapalı.
+allow_unsupported_versions = false
+
+[forwarding]
+# Velocity modern iletimi (HMAC imzalı). Sır, systemd'nin secrets.env'den verdiği
+# VELOCITY_FORWARDING_SECRET ortam değişkeninden okunur (PicoLimbo'nun kendi ortam yer tutucusu;
+# bizim @@ işlememiz buna dokunmaz). Sır depoya ASLA yazılmaz.
+method = "MODERN"
+secret = "${VELOCITY_FORWARDING_SECRET}"
+
+[server_list]
+# Sunucu listesi ping yanıtı (oyuncular bu sunucuyu doğrudan görmez; proxy arkasında).
+reply_to_status = true
+max_players = 200
+message_of_the_day = "Giriş sunucusu"
+show_online_player_count = false
+server_icon = "server-icon.png"
+
+[tab_list]
+# Sekme listesi başlığı/altlığı (varsayılanı İngilizce "Welcome to PicoLimbo").
+enabled = true
+header = "<gold><bold>Giriş Sunucusu</bold></gold>"
+footer = "<gray>/login [şifre] veya /register [şifre] [şifre]</gray>"
+player_listed = true
+
+[commands]
+# PicoLimbo'nun kendi komutları kapalı (boş dize = komut yok). /login ve /register
+# Velocity'deki LibreLogin'e aittir.
+spawn = ""
+fly = ""
+fly_speed = ""
+transfer = ""

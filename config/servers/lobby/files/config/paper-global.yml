@@ -1,0 +1,28 @@
+# Lobi — paper-global.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil; sürüm anahtarı bilerek yok).
+# Burada olmayan anahtarlar Paper varsayılanında kalır. "mc apply" bunları sunucudaki
+# dosyaya birleştirir (yorumlar birleştirmede taşınmaz; açıklamalar bu depodadır).
+proxies:
+  velocity:
+    # Velocity modern iletimi açık: oyuncu adı/UUID/IP proxy'den imzalı gelir.
+    enabled: true
+    # Velocity'deki online-mode ile AYNI olmalı (karma giriş → false). false iken Paper
+    # addan offline UUID üretir; bu da LibreLogin'in CRACKED UUID'leriyle eşleşir.
+    online-mode: false
+    # Sır dosyada TUTULMAZ: Paper PAPER_VELOCITY_SECRET ortam değişkenini okur
+    # (/etc/minecraft/secrets.env, systemd). Burada boş kalmalı.
+    secret: ''
+chunk-system:
+  # Parça (chunk) iş parçacıkları açıkça 1: lobide yükleme azdır; VM'deki çekirdek algısına
+  # bağlı kalmasın ve CPU diğer sunuculara kalsın.
+  worker-threads: 1
+  # -1 = otomatik (1 G/Ç iş parçacığı).
+  io-threads: -1
+collisions:
+  # Oyuncular birbirini itmesin: spawn'da kalabalıkta hem sıkışma hem CPU azalır (oynanışı değiştirir).
+  enable-player-collisions: false
+misc:
+  # Lobide Nether dünyası yüklenmesin (bellek/CPU tasarrufu). End için bukkit.yml allow-end.
+  enable-nether: false
+messages:
+  # İzin yok mesajı Türkçe (MiniMessage biçimi).
+  no-permission: '<red>Bu komutu kullanma yetkin yok.'

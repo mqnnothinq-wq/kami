@@ -1,0 +1,24 @@
+# Velocity proxy için JVM bayrakları (PaperMC Velocity ayar belgesindeki önerilen set).
+# Satır başına bir bayrak; '#' ile başlayan ve boş satırlar yok sayılır.
+# Heap (-Xms/-Xmx) server.env HEAP'ten, GC iş parçacığı sınırı GC_THREADS'ten gelir.
+
+-XX:+UseG1GC
+-XX:G1HeapRegionSize=4M
+-XX:+UnlockExperimentalVMOptions
+-XX:+ParallelRefProcEnabled
+-XX:+AlwaysPreTouch
+# JDK 14'ten beri varsayılan zaten 15; belgeyle birebir kalsın diye duruyor (zararsız).
+-XX:MaxInlineLevel=15
+
+# Bellek biterse süreç hemen çıksın, systemd (Restart=always) yeniden başlatsın.
+# Proxy durum tutmaz; yarı çalışır hâlde asılı kalmasından iyidir. (Paper'da KULLANILMAZ:
+# dünyayı kaydetmeden çıkardı.)
+-XX:+ExitOnOutOfMemoryError
+
+# JVM dili ASLA Türkçe olmamalı: LibreLogin premium sorgusundan önce adı yerel ayarsız
+# küçük harfe çevirir; tr'de "ILKER" → "ılker" olur, premium ad korunmaz.
+-Duser.language=en
+-Duser.country=US
+-Dfile.encoding=UTF-8
+-Dstdout.encoding=UTF-8
+-Dstderr.encoding=UTF-8

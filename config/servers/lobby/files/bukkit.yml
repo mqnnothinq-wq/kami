@@ -1,0 +1,15 @@
+# Lobi — bukkit.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+settings:
+  # Lobide End dünyası yüklenmesin (Nether için paper-global.yml misc.enable-nether).
+  allow-end: false
+  # Sunucu kapanırken oyunculara gösterilen mesaj (proxy onları başka sunucuya aktarabilir).
+  shutdown-message: Sunucu kapatılıyor, birazdan tekrar bağlanabilirsin.
+# Doğal mob doğması yok (oyun kuralı spawn_mobs=false ve barışçıl zorluğa ek güvence).
+spawn-limits:
+  monsters: 0
+  animals: 0
+  water-animals: 0
+  water-ambient: 0
+  water-underground-creature: 0
+  axolotls: 0
+  ambient: 0

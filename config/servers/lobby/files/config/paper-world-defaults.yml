@@ -1,0 +1,16 @@
+# Lobi — paper-world-defaults.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil; sürüm anahtarı bilerek yok).
+# Tüm dünyalar için varsayılan; dünya bazlı ayar world/dimensions/minecraft/<boyut>/paper-world.yml.
+entities:
+  armor-stands:
+    # Dekoratif zırh askıları düşmez/hareket etmez, çarpışma aramaz (oynanışı değiştirir;
+    # lobide yalnız süs olarak kullanılır).
+    tick: false
+    do-collision-entity-lookups: false
+environment:
+  # Lobide yıldırım ve kar/buz oluşumu yok (hava zaten sabit açık; oynanışı değiştirir).
+  disable-thunder: true
+  disable-ice-and-snow: true
+chunks:
+  # Yüklenmemiş parçaya yürümeye izin verme: eşzamanlı yükleme yerine kısa bir geri itme
+  # olur, sunucu takılmaz (oynanışı değiştirir: çok hızlı hareket eden oyuncu geri çekilir).
+  prevent-moving-into-unloaded-chunks: true

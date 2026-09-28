@@ -1,0 +1,20 @@
+# Lobi — spigot.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+settings:
+  # Velocity modern iletimi kullanılıyor; BungeeCord iletimi KAPALI olmalı.
+  bungeecord: false
+  # Çökmede yeniden başlatmayı systemd (Restart=always) yapar; Spigot'unki kapalı.
+  restart-on-crash: false
+  # Var olmayan betik: oyun içi /restart sunucuyu yalnız durdurur, systemd yeniden başlatır.
+  restart-script: ./yok.sh
+  # usercache.json her girişte değil yalnız kapanışta yazılsın (disk G/Ç tasarrufu).
+  save-user-cache-on-stop-only: true
+messages:
+  # /restart ile atılan oyuncuların gördüğü mesaj (& renk kodları).
+  restart: '&eSunucu yeniden başlatılıyor, birazdan tekrar bağlanabilirsin.'
+world-settings:
+  default:
+    entity-tracking-range:
+      # Oyuncuların birbirini gördüğü mesafe (varsayılan 128). Herkes spawn'da toplandığı için
+      # oyuncu sayısının karesiyle büyüyen izleme yükünü azaltır (oynanışı değiştirir: 48
+      # bloktan uzak oyuncular görünmez).
+      players: 48

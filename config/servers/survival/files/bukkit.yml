@@ -1,0 +1,23 @@
+# Ana sunucu — bukkit.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+settings:
+  # Sunucu kapanırken oyunculara gösterilen mesaj (proxy onları lobiye aktarabilir).
+  shutdown-message: Sunucu kapatılıyor, birazdan tekrar bağlanabilirsin.
+# Oyuncu başına doğal mob sınırları, ölçülü düşürüldü (oynanışı değiştirir: dünyada biraz
+# daha az mob; çiftlik verimi hafif düşer). Varsayılanlar parantez içinde.
+# Daha fazla CPU gerekirse ticks-per.monster-spawns vb. 2 yapılarak doğma denemeleri
+# yarıya indirilebilir (şu an vanilla: her tick).
+spawn-limits:
+  # canavar (70)
+  monsters: 50
+  # hayvan (10)
+  animals: 8
+  # kalamar, yunus (5)
+  water-animals: 3
+  # balıklar (20)
+  water-ambient: 10
+  # parlayan kalamar (5)
+  water-underground-creature: 3
+  # aksolotl (5)
+  axolotls: 3
+  # yarasa (15)
+  ambient: 5

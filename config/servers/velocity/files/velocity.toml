@@ -1,0 +1,184 @@
+# Velocity proxy yapılandırması — TAM dosya (default-velocity.toml, config-version "2.9").
+# Bu dosya depodan her "mc apply"da yeniden yazılır; sunucu üzerinde elle düzenlemeyin,
+# config/servers/velocity/files/velocity.toml'u düzenleyip "mc apply velocity" çalıştırın.
+# Velocity kod varsayılanları bu dosyanın örnek değerlerinden farklı olabildiği için
+# (ör. command-rate-limit) TÜM anahtarlar bilerek açıkça yazılmıştır.
+
+# Yapılandırma sürümü. Değiştirmeyin (Velocity göç/migration kararını buna göre verir).
+config-version = "2.9"
+
+# Proxy'nin dinlediği adres ve port. Tüm arayüzlerde 25565 (server.env PORT).
+bind = "0.0.0.0:@@PORT@@"
+
+# Sunucu listesinde görünen açıklama (MOTD). Yalnız MiniMessage biçimi kabul edilir;
+# hatalı etiket yapılandırmayı geçersiz kılar ve proxy açılmaz.
+motd = "<gradient:#ff8a00:#ffd200><bold>KAMI</bold></gradient> <gray>Türkiye Minecraft Ağı</gray><newline><yellow>Java + Bedrock</yellow> <dark_gray>|</dark_gray> <aqua>Premium ve cracked giriş</aqua>"
+
+# Sunucu listesinde gösterilen "en fazla oyuncu" sayısı. Yalnız görüntü: Velocity oyuncu
+# sayısını sınırlamaz (gerçek sınır backend'lerin max-players değeri).
+show-max-players = 100
+
+# Oyuncular Mojang ile doğrulansın mı? KARMA GİRİŞ nedeniyle KAPALI: premium oyuncuları
+# LibreLogin oyuncu bazında online moda zorlar, cracked oyuncular /register-/login yapar.
+# (Velocity açılışta "offline mode" uyarısı basar; beklenen durumdur.)
+online-mode = false
+
+# Yeni sohbet imzası anahtarı zorunlu olsun mu? KAPALI: açıkken anahtarsız (cracked)
+# 1.19–1.19.2 istemcileri atılır.
+force-key-authentication = false
+
+# Oyuncunun ISS/AS bilgisi Mojang'ın gördüğünden farklıysa at. Zayıf bir VPN engeli,
+# yanlış pozitif üretir; kapalı kalsın.
+prevent-client-proxy-connections = false
+
+# Oyuncu IP/UUID bilgisini backend'lere iletme biçimi:
+# "none" (yok), "legacy" (BungeeCord), "bungeeguard", "modern" (Velocity'nin kendi imzalı
+# yöntemi; 1.13+). Paper backend'ler ve PicoLimbo "modern" ile çalışır.
+player-info-forwarding-mode = "MODERN"
+
+# Modern iletim sırrının okunacağı dosya. Bizde sır VELOCITY_FORWARDING_SECRET ortam
+# değişkeninden gelir (/etc/minecraft/secrets.env; dosyadan önce okunur), bu dosya kullanılmaz.
+forwarding-secret-file = "forwarding.secret"
+
+# Sunucunun Forge desteklediğini duyur. Modlu sunucu yok; kapalı.
+announce-forge = false
+
+# Aynı adla ikinci bağlantıda içerideki oyuncuyu at. KARMA GİRİŞTE KAPALI OLMALI: açıksa
+# cracked biri aynı adla bağlanıp oturumdaki oyuncuyu atabilir.
+kick-existing-players = false
+
+# Sunucu listesinde oyuncu sayısının üstüne gelince çevrimiçi oyuncu adları gösterilsin mi?
+# Gizlilik için kapalı.
+sample-players-in-ping = false
+
+# Kapalıyken günlüklerde oyuncu IP'leri "<ip address withheld>" olarak yazılır.
+# KVKK (veri en aza indirme): IP'ler zaten LibreLogin veritabanında tutuluyor.
+enable-player-address-logging = false
+
+[ping-passthrough]
+# Sunucu listesi yanıtında backend'in sürüm numarası aktarılsın mı?
+version = false
+# Backend'in oyuncu sayısı aktarılsın mı?
+players = false
+# Backend'in açıklaması (MOTD) aktarılsın mı?
+description = false
+# Backend'in simgesi (favicon) aktarılsın mı?
+favicon = false
+# Backend'in mod listesi aktarılsın mı?
+modinfo = false
+# Hepsi kapalı: proxy kendi MOTD'unu ve toplam oyuncu sayısını gösterir.
+
+[packet-limiter]
+# Ortalama hızların hesaplandığı kayan zaman penceresi (saniye).
+interval = 7
+# İstemcinin saniyede gönderebileceği en fazla ortalama paket. -1 = kapalı.
+packets-per-second = -1
+# İstemcinin saniyede gönderebileceği en fazla ortalama sıkıştırılmış bayt. -1 = kapalı.
+bytes-per-second = -1
+# Açıldıktan sonraki (sıkıştırılmamış) bayt sınırı; "sıkıştırma bombası" saldırılarına karşı.
+# -1 = kapalı. Varsayılan 5 MiB/sn.
+decompressed-bytes-per-second = 5242880
+
+[servers]
+# Sunucu adı = "IP:port". Backend'ler yalnız 127.0.0.1'de dinler (dışarıdan erişilemez).
+# Giriş bekleme sunucusu (PicoLimbo). LibreLogin giriş yapmamış oyuncuları buraya gönderir.
+limbo = "127.0.0.1:30065"
+lobby = "127.0.0.1:30066"
+survival = "127.0.0.1:30067"
+
+# Girişte ve bir sunucudan atılınca denenecek sırayla sunucular.
+# "limbo" ASLA buraya yazılmaz (giriş yapmamış oyuncuyu LibreLogin yönlendirir).
+try = [
+    "lobby"
+]
+
+[forced-hosts]
+# Alan adına göre doğrudan sunucu seçimi. BİLEREK BOŞ ama tablo MUTLAKA kalmalı: tablo hiç
+# yoksa Velocity örnek alan adlarını (var olmayan factions/minigames) kullanır ve açılmaz.
+# Eklerseniz LibreLogin config.conf "lobby" haritasına da noktalar yerine § ile ekleyin:
+# "survival.ornek.com" = [ "survival" ]
+
+[advanced]
+# Bu boyuttan büyük paketler oyuncuya sıkıştırılarak gönderilir. 0 = hepsi, -1 = kapalı.
+# (Backend'lerde network-compression-threshold=-1: 127.0.0.1 hattında sıkıştırma yok,
+# sıkıştırmayı yalnız proxy bir kez yapar.)
+compression-threshold = 256
+
+# Sıkıştırma düzeyi (0-9). -1 = varsayılan (6).
+compression-level = -1
+
+# Aynı IP'den iki bağlantı arasındaki en kısa süre (ms). 0 = kapalı.
+login-ratelimit = 3000
+
+# Backend'e bağlanma zaman aşımı (ms).
+connection-timeout = 5000
+
+# Okuma zaman aşımı (ms).
+read-timeout = 30000
+
+# HAProxy PROXY protokolü. KAPALI: DeHost koruması şeffaf kabul edildi (gerçek IP'ler görünür).
+# NeoProtect GameShield gibi ters vekil kullanılırsa true yapılmalı; yanlış değer TÜM
+# bağlantıları bozar (bkz. docs/04-guvenlik-ddos.md).
+haproxy-protocol = false
+
+# TCP fast open (yalnız Linux). Gereksiz; kapalı.
+tcp-fast-open = false
+
+# BungeeCord eklenti mesaj kanalı desteği (lobi menüleri vb. kullanır).
+bungee-plugin-message-channel = true
+
+# İstemcilerin sunucu listesi ping isteklerini günlüğe yaz. Gürültü; kapalı.
+show-ping-requests = false
+
+# Backend beklenmedik şekilde koparsa oyuncuyu "try" listesindeki sunucuya (lobi) aktar.
+failover-on-unexpected-server-disconnect = true
+
+# Proxy komutlarını 1.13+ istemcilere bildir (sekme tamamlama).
+announce-proxy-commands = true
+
+# Komutları günlüğe yaz. KAPALI OLMALI: açıkken /login ve /register komutları ŞİFRELERİYLE
+# birlikte günlüğe düşer.
+log-command-executions = false
+
+# Oyuncu bağlanma, sunucu değiştirme ve ayrılmalarını günlüğe yaz (IP'ler yukarıdaki
+# ayar nedeniyle gizlenir).
+log-player-connections = true
+
+# Başka sunuculardan Transfer paketiyle (1.20.5+) gelen oyuncuları kabul et. Kullanılmıyor
+# (Sonar'ın transfer özelliği de kapalı).
+accepts-transfers = false
+
+# SO_REUSEPORT desteği. 100 oyuncuda yararı yok; kapalı.
+enable-reuse-port = false
+
+# İki komut arasındaki en kısa süre (ms). 50 ms = saniyede 20 komut.
+command-rate-limit = 50
+
+# Sınıra takılan komut proxy yerine backend'e iletilsin (backend'in kendi sınırı var).
+forward-commands-if-rate-limited = true
+
+# Sınır aşıldıktan sonra kaç komutta oyuncu atılsın. 0 veya altı = kapalı.
+kick-after-rate-limited-commands = 0
+
+# İki sekme tamamlama isteği arasındaki en kısa süre (ms).
+tab-complete-rate-limit = 10
+
+# Sınır aşıldıktan sonra kaç sekme tamamlamada oyuncu atılsın. 0 veya altı = kapalı.
+kick-after-rate-limited-tab-completes = 0
+
+[query]
+# GameSpy 4 query yanıtı (UDP). Kapalı; port açılmaz.
+enabled = false
+
+# Query açılırsa dinlenecek port.
+port = 25565
+
+# Query'de bildirilen harita adı.
+map = "Velocity"
+
+# Query yanıtında eklentiler gösterilsin mi?
+show-plugins = false
+
+[metrics]
+# Anonim bStats istatistikleri (varsayılan dosyada yok; kod varsayılanı true). Açıkça yazıldı.
+enabled = true

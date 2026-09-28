@@ -1,0 +1,44 @@
+# Paper sunucuları (lobby, survival, yeni sunucular) için JVM bayrakları.
+# Satır başına bir bayrak; '#' ile başlayan ve boş satırlar yok sayılır.
+# Heap (-Xms/-Xmx) BURADA YOK: her sunucunun server.env HEAP değerinden gelir.
+# GC iş parçacığı sınırı da server.env GC_THREADS'ten eklenir.
+
+# --- Aikar bayrakları (PaperMC belgelerindeki güncel set; G1 çöp toplayıcı) ---
+# Kısa, öngörülebilir GC duraklamaları için ayarlanmış G1. 8 GB altı heap'ler için uygun.
+-XX:+UseG1GC
+-XX:+ParallelRefProcEnabled
+-XX:MaxGCPauseMillis=200
+-XX:+UnlockExperimentalVMOptions
+-XX:+DisableExplicitGC
+# Heap'in tamamını açılışta ayırır: bellek yetersizse sorun oyuncu varken değil açılışta görünür.
+-XX:+AlwaysPreTouch
+-XX:G1NewSizePercent=30
+-XX:G1MaxNewSizePercent=40
+-XX:G1HeapRegionSize=8M
+-XX:G1ReservePercent=20
+-XX:G1HeapWastePercent=5
+-XX:G1MixedGCCountTarget=4
+-XX:InitiatingHeapOccupancyPercent=15
+-XX:G1MixedGCLiveThresholdPercent=90
+-XX:G1RSetUpdatingPauseTimePercent=5
+-XX:SurvivorRatio=32
+-XX:+PerfDisableSharedMem
+-XX:MaxTenuringThreshold=1
+# Yalnız işaret amaçlı sistem özellikleri (JVM davranışını değiştirmez).
+-Dusing.aikars.flags=https://mcflags.emc.gs
+-Daikars.new.flags=true
+
+# --- Dil ve karakter kodlaması ---
+# JVM dili ASLA Türkçe olmamalı: tr yerel ayarında "I".toLowerCase() = "ı" olur ve
+# eklentilerdeki komut/malzeme adı eşleşmelerini bozar. Oyuncular Türkçeyi istemcide seçer.
+-Duser.language=en
+-Duser.country=US
+-Dfile.encoding=UTF-8
+-Dstdout.encoding=UTF-8
+-Dstderr.encoding=UTF-8
+
+# --- GC günlüğü (performans sorunlarını teşhis için; oyun performansını etkilemez) ---
+# En fazla 5 x 10 MB tutulur. DİKKAT: PaperMC belgesindeki biçim "logs/gc.log" kullanır, ancak
+# JVM hedef dizin yoksa HİÇ AÇILMAZ ("Error opening log file ... No such file or directory";
+# ilk açılışta logs/ henüz yok). Bu yüzden dosya sunucu dizininin köküne yazılır.
+-Xlog:gc*:file=gc.log:time,uptime:filecount=5,filesize=10M

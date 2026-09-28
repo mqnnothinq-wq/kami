@@ -1,0 +1,81 @@
+# Ana sunucu — paper-world-defaults.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil; sürüm anahtarı bilerek yok).
+# Oyun modu henüz seçilmedi: ayarlar performans için güvenli ama aşırı değil.
+# "(oynanışı değiştirir)" işaretliler vanilla davranışından farklıdır.
+# Dünya bazlı ayar (ör. Nether'e özel anti-xray listesi):
+#   world/dimensions/minecraft/the_nether/paper-world.yml
+anticheat:
+  anti-xray:
+    # X-ray hilesine karşı gömülü madenleri gizle. Mod 1 (HIDE) sunucu ve istemci için en ucuzu;
+    # yalnız tamamen kapalı madenleri gizler. X-ray kötüye kullanımı görülürse mod 3'e geçin
+    # (mod 2 en ağır paketleri üretir, mobil Bedrock oyuncularını yorar).
+    enabled: true
+    engine-mode: 1
+chunks:
+  # Yüklenmemiş parçaya yürümeye/uçmaya izin verme: sunucu eşzamanlı yüklemeyle takılmaz,
+  # oyuncu kısa süre geri itilir (oynanışı değiştirir: hızlı elytra uçuşunda hissedilir).
+  prevent-moving-into-unloaded-chunks: true
+  # Bir parçada kaydedilecek en fazla varlık: "lag chunk"/parça bombası kötüye kullanımını
+  # engeller (oynanışı değiştirir: bir parçada 16'dan fazla inci/ok/XP küresi kaydedilmez;
+  # büyük inci-bekletme (stasis) odaları bu sınıra takılabilir).
+  entity-per-chunk-save-limit:
+    experience_orb: 16
+    arrow: 16
+    snowball: 16
+    ender_pearl: 16
+    fireball: 8
+    small_fireball: 8
+collisions:
+  # Bir varlığın aynı anda çarpışma hesabı yaptığı en fazla varlık (varsayılan 8).
+  # Kalabalık hayvan çiftliklerinde büyük CPU tasarrufu (oynanışı değiştirir: itişme azalır).
+  max-entity-collisions: 2
+entities:
+  spawning:
+    # Oyuncu olmayanların (iskelet vb.) ve yaratıcı moddakilerin oklarını 1 sn'de sil
+    # (zaten yerden alınamazlar; oynanışı değiştirir: yalnız görsel).
+    non-player-arrow-despawn-rate: 20
+    creative-arrow-despawn-rate: 20
+    despawn-ranges:
+      monster:
+        # Vanilla: 32 bloktan uzakta rastgele, 128'den uzakta anında kaybolur. Yatayda 72'den
+        # uzak canavar anında kaybolsun: simülasyon mesafesi 5 (≈80 blok) dışındaki donmuş
+        # canavarlar mob sınırını doldurmasın. Dikey sınır vanilla (yüksek AFK kuleli
+        # çiftlikler bozulmasın) (oynanışı değiştirir).
+        soft: 32
+        hard:
+          horizontal: 72
+          vertical: default
+    # Sık düşen ucuz blokların yerdeki eşyası 5 dk yerine 1 dk'da silinsin (1200 tick)
+    # (oynanışı değiştirir: ölünce düşen bu bloklar daha çabuk kaybolur).
+    alt-item-despawn-rate:
+      enabled: true
+      items:
+        cobblestone: 1200
+        cobbled_deepslate: 1200
+        netherrack: 1200
+        dirt: 1200
+        gravel: 1200
+        sand: 1200
+        granite: 1200
+        diorite: 1200
+        andesite: 1200
+        tuff: 1200
+  behavior:
+    # spigot.yml nerf-spawner-mobs açılırsa (şu an KAPALI) yapay zekâsız spawner mobları
+    # sudan çıkabilsin, çiftlikler bozulmasın. Nerf kapalıyken etkisizdir.
+    spawner-nerfed-mobs-should-jump: true
+environment:
+  # Patlamalarda varlık aramalarını önbelleğe al (TNT/creeper kalabalığında CPU tasarrufu).
+  optimize-explosions: true
+fixes:
+  # spigot.yml'de eşya birleştirme yarıçapı büyütüldüğü için duvar arkasından birleşmeyi engelle.
+  fix-items-merging-through-walls: true
+misc:
+  # Redstone tozu için Alternate Current: çok daha az blok güncellemesi, büyük CPU tasarrufu
+  # (oynanışı değiştirir: toz güncelleme SIRASI vanilla'dan farklı; sıraya dayalı çok hassas
+  # makineler farklı davranabilir). Sorun olursa VANILLA yapın.
+  redstone-implementation: ALTERNATE_CURRENT
+tick-rates:
+  # Yalnız çimen bloğu (grass_block) yayılması ve toprağa dönüşmesi 4 tick'te bir; miselyum etkilenmez (oynanışı değiştirir: yayılma daha yavaş).
+  grass-spread: 4
+  # Spawner 2 tick'te bir işlenir; Paper aradaki süreyi telafi eder, üretim hızı değişmez.
+  mob-spawner: 2

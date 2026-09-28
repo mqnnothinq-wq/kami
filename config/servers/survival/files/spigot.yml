@@ -1,0 +1,50 @@
+# Ana sunucu — spigot.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
+# Dünya ayarları world-settings.default altında (tüm dünyalar). Boyuta özel ayar anahtarı
+# klasör adı değil boyut kimliğidir, ör. world-settings."minecraft:the_nether".
+settings:
+  # Velocity modern iletimi kullanılıyor; BungeeCord iletimi KAPALI olmalı.
+  bungeecord: false
+  # Çökmede yeniden başlatmayı systemd (Restart=always) yapar; Spigot'unki kapalı.
+  restart-on-crash: false
+  # Var olmayan betik: oyun içi /restart sunucuyu yalnız durdurur, systemd yeniden başlatır.
+  restart-script: ./yok.sh
+  # usercache.json her girişte değil yalnız kapanışta yazılsın (disk G/Ç tasarrufu).
+  save-user-cache-on-stop-only: true
+messages:
+  # /restart ile atılan oyuncuların gördüğü mesaj (& renk kodları).
+  restart: '&eSunucu yeniden başlatılıyor, birazdan tekrar bağlanabilirsin.'
+world-settings:
+  default:
+    # Mob doğma yarıçapı (parça). Simülasyon mesafesine (5) eşitlendi: işlenmeyen uzak
+    # parçalardaki moblar oyuncunun mob sınırını boşuna doldurmasın (varsayılan 8).
+    mob-spawn-range: 5
+    merge-radius:
+      # Yerdeki eşyalar 2.5, XP küreleri 3 blok içinde birleşsin: daha az varlık
+      # (oynanışı değiştirir: eşyalar/küreler daha uzaktan tek yığına toplanır).
+      item: 2.5
+      exp: 3.0
+    entity-activation-range:
+      # Bu mesafeden uzak varlıklar seyrek işlenir (düşme, suda olma vb. yine işlenir).
+      # Varsayılanlar: hayvan 32, canavar 32, akıncı 64, diğer 16, su 16, köylü 32, uçan 32.
+      # (oynanışı değiştirir: uzaktaki moblar daha az hareket eder)
+      animals: 16
+      monsters: 24
+      raiders: 48
+      misc: 8
+      water: 8
+      villagers: 16
+      flying-monsters: 48
+      # Uzaktaki köylüler yine normal işlensin (demir/köylü çiftlikleri bozulmasın).
+      tick-inactive-villagers: true
+    entity-tracking-range:
+      # İstemciye gönderilen varlık görünürlük mesafesi (blok). Ağ trafiğini ve CPU'yu azaltır
+      # (oynanışı değiştirir: uzak oyuncu/mob daha yakında belirir). Varsayılanlar
+      # oyuncu 128, hayvan/canavar/diğer(misc) 96; display (128) ve other (64) değişmedi.
+      players: 64
+      animals: 48
+      monsters: 48
+      misc: 32
+    # Spawner'dan çıkan mobların yapay zekâsı kapatılsın mı? KAPALI (vanilla).
+    # XP/mob çiftlikleri CPU'yu zorlarsa true yapın (oynanışı değiştirir: spawner mobları
+    # hareketsiz durur, çiftlik tasarımları buna göre değişir).
+    nerf-spawner-mobs: false
