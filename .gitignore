@@ -1,0 +1,20 @@
+# Gizli değerler asla depoya girmez
+*.secret
+forwarding.secret
+key.pem
+secrets.env
+backup.env
+*.pass
+
+# Çalışma zamanı verileri (sunucu dizinleri, dünyalar, jar'lar)
+servers/
+world*/
+*.jar
+*.jar.new
+*.jar.old
+logs/
+
+# Araç çıktıları
+__pycache__/
+*.pyc
+*.tmp
