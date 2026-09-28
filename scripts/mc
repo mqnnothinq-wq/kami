@@ -7,6 +7,7 @@
 #   MC_RCON_WAIT=60       mc init: RCON'un açılması için en uzun bekleme (sn)
 #   MC_POLL_INTERVAL=2    bekleme döngülerinin aralığı (sn)
 #   MC_NO_SLEEP=1         countdown-restart beklemelerini atlar (yalnız test)
+#   MC_LOCK_WAIT=900      countdown-restart: yedek kilidi için en uzun bekleme (sn)
 #   MC_MEMINFO, MC_JAVA_BIN  doctor/new-server için /proc/meminfo ve /usr/bin/java yerine
 set -Eeuo pipefail
 # shellcheck source=SCRIPTDIR/lib.sh
@@ -25,7 +26,8 @@ usage() {
 Kullanım: mc <komut> [argümanlar]
 
 Kurulum ve yapılandırma:
-  download [all|core|plugins] [sunucu]   Paper/Velocity ve eklentileri indirir
+  download [--dry-run] [all|core|plugins] [sunucu]
+                                         Paper/Velocity ve eklentileri indirir
   apply [--dry-run] [sunucu|all]         config/ ağacını sunuculara uygular
   init <sunucu|all> --accept-eula        ilk kurulum: EULA, config, ilk açılış,
                                          init-commands.txt, config'i yeniden uygula
@@ -33,8 +35,8 @@ Kurulum ve yapılandırma:
                                          yeni backend sunucusu tanımlar
 
 Çalıştırma:
-  start [sunucu|all]      başlatır (all: önce backend'ler, sonra velocity)
-  stop [sunucu|all]       durdurur (all: önce velocity, sonra backend'ler)
+  start [sunucu|all]      başlatır (all: önce backend'ler ve limbo, sonra velocity)
+  stop [sunucu|all]       durdurur (all: önce velocity, sonra diğerleri)
   restart [sunucu|all]    durdurup yeniden başlatır
   status [sunucu|all]     durum tablosu: tür, port, durum, bellek (RSS), heap
   log <sunucu> [...]      günlüğü canlı izler (journalctl -f; Ctrl+C ile çıkın)
@@ -43,11 +45,12 @@ Konsol:
   cmd <sunucu> <komut...>     konsola komut yazar (velocity dahil; yanıt: mc log)
   rcon <sunucu> <komut...>    RCON ile çalıştırır ve yanıtı basar (yalnız paper)
   say <mesaj...>              çalışan tüm backend'lere duyuru yapar
-  countdown-restart [dakika]  geri sayım duyurusu (varsayılan 5), sonra restart all
+  countdown-restart [dakika]  geri sayım duyurusu (varsayılan 5), sonra çalışan
+                              sunucuları yeniden başlatır (durdurulmuşlar kapalı kalır)
 
 Yedekleme:
   backup [sunucu|all]         restic ile yedek alır
-  backup list                 yedekleri listeler
+  backup list [sunucu]        yedekleri listeler
   backup prune                saklama politikasına göre eski yedekleri siler
   restore <sunucu> <snapshot> yedekten geri yükler
 
@@ -77,6 +80,49 @@ list_proxies() {
     done < <(list_servers)
 }
 
+# Proxy dışındaki tüm sunucular (paper + limbo); lib.sh list_backends yalnız paper döndürür.
+list_nonproxy() {
+    local s
+    while IFS= read -r s; do
+        if [[ -n $s && $(server_get "$s" TYPE) != velocity ]]; then printf '%s\n' "$s"; fi
+    done < <(list_servers)
+}
+
+IS_ROOT=0
+if [[ ${EUID:-$(id -u)} -eq 0 ]]; then IS_ROOT=1; fi
+MC_GROUP=""
+
+# Komutu sunucu dosyalarının sahibi olarak çalıştırır (root değilsek olduğu gibi). Sunucu
+# dizinleri minecraft'ındır; oradaki bir sembolik bağ root yetkisiyle izlenmemelidir.
+as_mc() {
+    if ((IS_ROOT)); then
+        (cd / && exec setpriv --reuid="$MC_USER" --regid="${MC_GROUP:-$MC_USER}" --init-groups -- "$@")
+    else
+        "$@"
+    fi
+}
+
+# <port> dinlenen yerel adresleri (ss -ltn) satır satır yazar.
+listen_addrs() {
+    { ss -ltn 2>/dev/null || true; } | awk -v p="$1" 'NR > 1 {
+        a = $4; i = length(a)
+        while (i > 0 && substr(a, i, 1) != ":") i--
+        if (i && substr(a, i + 1) == p) print substr(a, 1, i - 1) }'
+}
+
+# stdin'deki adreslerden loopback olmayanları boşlukla ayırarak yazar.
+non_loopback() {
+    local a
+    while IFS= read -r a; do
+        [[ -n $a ]] || continue
+        a=${a%%%*}
+        case $a in
+            127.* | '[::1]' | '[::ffff:127.'*) ;;
+            *) printf ' %s' "$a" ;;
+        esac
+    done
+}
+
 need_server() { # <ad> — tek, tanımlı bir sunucu adı ister ('all' değil)
     [[ -n ${1:-} ]] || die "Sunucu adı gerekli."
     [[ $1 != all ]] || die "Bu komut 'all' kabul etmez; bir sunucu adı verin."
@@ -90,11 +136,11 @@ targets_in_order() { # <hedef> <start|stop>
         need_server "$t"
         printf '%s\n' "$t"
     elif [[ $order == start ]]; then
-        list_backends || true
+        list_nonproxy
         list_proxies
     else
         list_proxies
-        list_backends || true
+        list_nonproxy
     fi
 }
 
@@ -162,13 +208,14 @@ rcon_exec() { # <sunucu> <komut> — yanıtı stdout'a basar, rcon.py çıkış 
     RCON_PASSWORD="$RCON_PASSWORD" python3 "$SCRIPTS_DIR/rcon.py" -p "$port" "$command"
 }
 
-# Çalışan tüm backend'lere 'say' gönderir; hata olursa uyarır ama durmaz.
+# Çalışan tüm paper sunucularına 'say' gönderir; hata olursa uyarır ama durmaz
+# (rcon_exec yapılandırma hatasında die eder: alt kabuk bu çıkışı burada tutar).
 broadcast() {
     local msg=$1 s n=0
     while IFS= read -r s; do
         [[ -n $s ]] || continue
         is_running "$s" || continue
-        if rcon_exec "$s" "say $msg" >/dev/null; then
+        if (rcon_exec "$s" "say $msg") </dev/null >/dev/null; then
             n=$((n + 1))
         else
             log_warn "$s: duyuru gönderilemedi."
@@ -184,7 +231,7 @@ cmd_start() {
     local t b p
     t=$(one_target_arg "$@")
     if [[ $t == all ]]; then
-        b=$(list_backends || true)
+        b=$(list_nonproxy)
         p=$(list_proxies)
         [[ -n $b$p ]] || die "Tanımlı sunucu yok."
         require_root
@@ -204,7 +251,7 @@ cmd_stop() {
     local t b p
     t=$(one_target_arg "$@")
     if [[ $t == all ]]; then
-        b=$(list_backends || true)
+        b=$(list_nonproxy)
         p=$(list_proxies)
         require_root
         mapfile -t b <<<"$b"
@@ -230,7 +277,8 @@ cmd_status() {
     local t list s type port heap props state sub mem
     t=$(one_target_arg "$@")
     list=$(targets_in_order "$t" stop)
-    printf '%-14s %-9s %-6s %-24s %8s %7s\n' SUNUCU TUR PORT DURUM RSS HEAP
+    # printf bayt sayar: 'TÜR' 4 bayt olduğundan sütun bir fazla genişlikte basılır.
+    printf '%-14s %-10s %-6s %-24s %8s %7s\n' SUNUCU TÜR PORT DURUM RSS HEAP
     while IFS= read -r s; do
         [[ -n $s ]] || continue
         type=$(server_get "$s" TYPE)
@@ -283,6 +331,38 @@ cmd_say() {
     broadcast "$*"
 }
 
+# Yedek/geri yükleme ile aynı kilidi alır (backup.sh): yedek alınırken ya da geri yüklenirken
+# sunucular yeniden başlatılmaz. Kilit süreç bitene dek tutulur.
+take_backup_lock() {
+    local fd wait=${MC_LOCK_WAIT:-900}
+    [[ -d $MC_ROOT ]] || return 0
+    require_cmd flock
+    exec {fd}>>"$MC_ROOT/.backup.lock"
+    if ! flock -w "$wait" "$fd"; then
+        die "Yedekleme/geri yükleme sürüyor ($MC_ROOT/.backup.lock, $wait sn beklendi); yeniden başlatma atlandı."
+    fi
+}
+
+# Şu an çalışan sunucuları yeniden başlatır: velocity durur → diğerleri durur → diğerleri
+# başlar → velocity başlar. Bilerek durdurulmuş sunucular (bakım, geri yükleme) kapalı kalır.
+restart_running() {
+    local s proxies=() others=()
+    while IFS= read -r s; do
+        [[ -n $s ]] || continue
+        if ! is_running "$s"; then continue; fi
+        if [[ $(server_get "$s" TYPE) == velocity ]]; then proxies+=("$s"); else others+=("$s"); fi
+    done < <(list_servers)
+    if ((${#proxies[@]} + ${#others[@]} == 0)); then
+        log_warn "Çalışan sunucu kalmadı; yeniden başlatılacak bir şey yok."
+        return 0
+    fi
+    units_do stop "${proxies[@]}"
+    units_do stop "${others[@]}"
+    units_do start "${others[@]}"
+    units_do start "${proxies[@]}"
+    log_ok "Yeniden başlatıldı: ${others[*]} ${proxies[*]}"
+}
+
 cmd_countdown_restart() {
     local min=${1:-5} s any=0
     (($# <= 1)) || die "Kullanım: mc countdown-restart [dakika]"
@@ -295,6 +375,7 @@ cmd_countdown_restart() {
         log_warn "Hiçbir sunucu çalışmıyor; yeniden başlatma atlandı (bakımda olabilir)."
         return 0
     fi
+    take_backup_lock
     log_info "Geri sayım başladı: $min dakika."
     broadcast "Sunucu $min dakika içinde yeniden başlatılacak."
     if ((min > 1)); then
@@ -306,70 +387,114 @@ cmd_countdown_restart() {
     nap 20
     broadcast "Sunucu 10 saniye içinde yeniden başlatılacak. Görüşmek üzere!"
     nap 10
-    cmd_restart all
+    restart_running
 }
 
-# --- mc init (SPEC §8) -------------------------------------------------------
+# --- mc init (SPEC §8, §17) -------------------------------------------------
 
 INIT_FAILED=()
 
-own_path() {
-    chown "$MC_USER:$MC_USER" "$@"
-}
-
+# Sunucu dizinini oluşturur. servers/ root'a ait $MC_ROOT altında root tarafından, sunucu
+# dizini ise minecraft kimliğiyle oluşturulur (servers/ minecraft'ındır).
 ensure_server_dir() {
     local d="$SERVERS_DIR/$1"
+    [[ ! -L $SERVERS_DIR && ! -L $d ]] || die "$d (ya da $SERVERS_DIR) sembolik bağ — güvenlik için reddedildi."
     [[ -d $d ]] && return 0
     if [[ ! -d $SERVERS_DIR ]]; then
         mkdir -p "$MC_ROOT"
-        mkdir -m 0750 "$SERVERS_DIR"
-        own_path "$SERVERS_DIR"
+        install -d -m 0750 -o "$MC_USER" -g "$MC_GROUP" "$SERVERS_DIR"
     fi
-    mkdir -m 0750 "$d"
-    own_path "$d"
+    as_mc mkdir -m 0750 -- "$d" || die "$d oluşturulamadı ($MC_USER kimliğiyle; $SERVERS_DIR sahibi $MC_USER olmalı)."
     log_info "Oluşturuldu: $d"
 }
 
+# eula.txt minecraft kimliğiyle geçici dosya + mv ile yazılır: sunucu dizinine bırakılmış
+# bir sembolik bağ root yetkisiyle izlenmez.
 write_eula() {
-    local f="$SERVERS_DIR/$1/eula.txt"
-    if [[ -f $f ]] && grep -qx 'eula=true' "$f"; then return 0; fi
+    local d="$SERVERS_DIR/$1" f
+    f="$d/eula.txt"
+    [[ ! -L $f ]] || die "$f sembolik bağ — güvenlik için reddedildi (sunucu dizinini inceleyin)."
+    if [[ -f $f ]] && as_mc grep -qx 'eula=true' "$f" 2>/dev/null; then return 0; fi
+    # shellcheck disable=SC2016  # değişkenler iç kabukta genişler
     printf '# %s tarihinde "mc init --accept-eula" ile kabul edildi: %s\neula=true\n' \
-        "$(date '+%Y-%m-%d %H:%M')" "$EULA_URL" >"$f"
-    chmod 0640 "$f"
-    own_path "$f"
+        "$(date '+%Y-%m-%d %H:%M')" "$EULA_URL" \
+        | as_mc bash -c '
+            set -Eeuo pipefail
+            umask 027
+            tmp=$(mktemp "$1/.eula.XXXXXX")
+            trap '\''rm -f -- "$tmp"'\'' EXIT
+            cat >"$tmp"
+            chmod 0640 "$tmp"
+            mv -f -- "$tmp" "$1/eula.txt"' _ "$d" \
+        || die "$1: eula.txt yazılamadı ($MC_USER kimliğiyle)."
     log_info "$1: eula.txt yazıldı (eula=true)."
 }
 
-# Günlükte hazır satırı var mı? (Paper: Done (…)! For help, type "help"; Velocity: Done (…)!)
+# Günlükte sunucunun KENDİ hazır satırı var mı? Paper: "[12:00:03 INFO]: Done (3.210s)! For help,
+# type "help"", Velocity: "[12:00:03 INFO]: Done (2.1s)!". Eklenti satırları eşleşmez: Velocity'de
+# "[… INFO] [sonar]: Done (…)!" (Sonar açılışta böyle yazar), Paper'da "[… INFO]: [Eklenti] …".
 log_has_ready() { # <tür> <günlük metni>
-    if [[ $1 == paper ]]; then
-        awk 'index($0, "Done (") && index($0, "For help, type \"help\"") { f = 1 } END { exit !f }' <<<"$2"
-    else
-        awk 'index($0, "Done (") { f = 1 } END { exit !f }' <<<"$2"
+    local re='^\[[^]]* INFO\]: Done \([0-9.,]+s\)!'
+    if [[ $1 == paper ]]; then re+=' For help, type "help"'; fi
+    grep -qE -- "$re" <<<"$2"
+}
+
+# Birim çöktü/durdu mu? (auto-restart dahil) Öyleyse günlüğün sonunu basar.
+unit_failed() { # <sunucu> <başlangıç>
+    local s=$1 since=$2 unit state sub
+    unit=$(unit_of "$s")
+    state=$(systemctl show -p ActiveState --value "$unit" 2>/dev/null || true)
+    sub=$(systemctl show -p SubState --value "$unit" 2>/dev/null || true)
+    if [[ $state == failed || $state == inactive || $sub == auto-restart ]]; then
+        log_error "$s başlatılamadı ya da kapandı (durum: $state/$sub). Son günlük satırları:"
+        journalctl -u "$unit" --since "$since" -o cat --no-pager -q 2>/dev/null | tail -n 30 >&2 || true
+        return 0
     fi
+    return 1
 }
 
 wait_ready() { # <sunucu> <tür> <başlangıç zamanı>
-    local s=$1 type=$2 since=$3 unit out state sub deadline
+    local s=$1 type=$2 since=$3 unit out deadline
     unit=$(unit_of "$s")
     deadline=$((SECONDS + ${MC_READY_TIMEOUT:-600}))
     log_info "$s: hazır olması bekleniyor (en çok ${MC_READY_TIMEOUT:-600} sn)…"
     while :; do
+        # Önce durum: "Done" yazıp hemen çöken (auto-restart) sunucu hazır sayılmaz.
+        if unit_failed "$s" "$since"; then return 1; fi
         out=$(journalctl -u "$unit" --since "$since" -o cat --no-pager -q 2>/dev/null || true)
         if log_has_ready "$type" "$out"; then
             log_ok "$s hazır."
             return 0
         fi
-        state=$(systemctl show -p ActiveState --value "$unit" 2>/dev/null || true)
-        sub=$(systemctl show -p SubState --value "$unit" 2>/dev/null || true)
-        if [[ $state == failed || $state == inactive || $sub == auto-restart ]]; then
-            log_error "$s başlatılamadı ya da kapandı (durum: $state/$sub). Son günlük satırları:"
-            tail -n 30 <<<"$out" >&2
-            return 1
-        fi
         if ((SECONDS >= deadline)); then
             log_error "$s: zaman aşımı — hazır satırı gelmedi. Son günlük satırları:"
             tail -n 30 <<<"$out" >&2
+            return 1
+        fi
+        sleep "$POLL"
+    done
+}
+
+# Limbo (PicoLimbo) hazır = portu 127.0.0.1'de dinliyor (ss -ltn). Dış arayüzde dinleyen
+# limbo girişi atlatmaya izin verir: hata sayılır.
+wait_listen() { # <sunucu> <port> <başlangıç zamanı>
+    local s=$1 port=$2 since=$3 addrs bad deadline
+    deadline=$((SECONDS + ${MC_READY_TIMEOUT:-600}))
+    log_info "$s: 127.0.0.1:$port dinlenmesi bekleniyor (en çok ${MC_READY_TIMEOUT:-600} sn)…"
+    while :; do
+        if unit_failed "$s" "$since"; then return 1; fi
+        addrs=$(listen_addrs "$port")
+        if [[ -n $addrs ]]; then
+            bad=$(non_loopback <<<"$addrs")
+            if [[ -n $bad ]]; then
+                log_error "$s: $port dış arayüzde dinleniyor ($bad ) — server.toml'da bind = \"127.0.0.1:$port\" olmalı (dışarıdan erişilen limbo girişi atlatır)."
+                return 1
+            fi
+            log_ok "$s hazır (127.0.0.1:$port dinleniyor)."
+            return 0
+        fi
+        if ((SECONDS >= deadline)); then
+            log_error "$s: zaman aşımı — $port dinlenmedi. Günlük: journalctl -u $(unit_of "$s") --since '$since'"
             return 1
         fi
         sleep "$POLL"
@@ -424,10 +549,27 @@ run_init_commands() { # <sunucu>
     ((fail == 0))
 }
 
-init_one() {
-    local s=$1 type unit since
-    type=$(server_get "$s" TYPE)
+# Birimi başlatır ve hazır olmasını bekler; olmazsa durdurup çıkar.
+boot() { # <sunucu> <tür> <açıklama>
+    local s=$1 type=$2 what=$3 unit since port
     unit=$(unit_of "$s")
+    log_info "$s: $what"
+    # Mikrosaniye: ikinci açılış, ilk açılışın "Done" satırını görmesin.
+    since=$(date '+%Y-%m-%d %H:%M:%S.%6N')
+    units_do start "$s" || die "$s başlatılamadı: systemctl status $unit / journalctl -u $unit -e"
+    if [[ $type == limbo ]]; then
+        port=$(server_get "$s" PORT)
+        if wait_listen "$s" "$port" "$since"; then return 0; fi
+    elif wait_ready "$s" "$type" "$since"; then
+        return 0
+    fi
+    systemctl stop "$unit" || true
+    die "$s: $what başarısız. Tüm günlük: journalctl -u $unit --since '$since'"
+}
+
+init_one() {
+    local s=$1 type port
+    type=$(server_get "$s" TYPE)
     log_info "=== $s ($type): ilk kurulum ==="
     if [[ $type == paper ]]; then write_eula "$s"; fi
     bash "$SCRIPTS_DIR/apply-config.sh" "$s"
@@ -437,23 +579,31 @@ init_one() {
         return 0
     fi
 
-    since=$(date '+%Y-%m-%d %H:%M:%S')
-    units_do start "$s"
-    if ! wait_ready "$s" "$type" "$since"; then
-        systemctl stop "$unit" || true
-        die "$s: ilk açılış başarısız. Tüm günlük: journalctl -u $unit --since '$since'"
+    if [[ $type == limbo ]]; then
+        # PicoLimbo: EULA, RCON ve init komutu yok; açılıp portu dinliyor mu, ona bakılır.
+        port=$(server_get "$s" PORT)
+        [[ -z $(listen_addrs "$port") ]] || die "$s: $port portu zaten dinleniyor — başka bir süreç mi? (ss -ltnp)"
+        boot "$s" "$type" "ilk açılış (port denetimi)"
+        units_do stop "$s"
+        log_ok "$s: ilk kurulum tamamlandı."
+        return 0
     fi
-    if [[ $type == paper ]] && ! run_init_commands "$s"; then
-        INIT_FAILED+=("$s")
-    fi
+
+    boot "$s" "$type" "ilk açılış (eklentiler config dosyalarını üretir)"
     units_do stop "$s"
-    # İlk açılışta eklentiler config üretti; şimdi onların override'ları da uygulanır.
+    # Eklenti override'ları init komutlarından ÖNCE uygulanmalı: yoksa ör. 'lp …' komutları
+    # LuckPerms'ün varsayılan yerel deposuna (H2) yazılır, MariaDB'ye geçince kaybolur.
     bash "$SCRIPTS_DIR/apply-config.sh" "$s"
+    if [[ $type == paper ]]; then
+        boot "$s" "$type" "ikinci açılış (son yapılandırmayla; init komutları)"
+        if ! run_init_commands "$s"; then INIT_FAILED+=("$s"); fi
+        units_do stop "$s"
+    fi
     log_ok "$s: ilk kurulum tamamlandı."
 }
 
 cmd_init() {
-    local target="" eula=0 a s list
+    local target="" eula=0 a s list bin has_limbo=0 targets=()
     for a in "$@"; do
         case $a in
             --accept-eula) eula=1 ;;
@@ -476,20 +626,32 @@ cmd_init() {
     require_root
     { id -u "$MC_USER" && getent group "$MC_USER"; } >/dev/null 2>&1 \
         || die "Kullanıcı/grup yok: $MC_USER — önce scripts/install.sh çalıştırın."
+    MC_GROUP=$(id -gn "$MC_USER")
+    require_cmd setpriv
 
-    # Ön denetim: hiçbir sunucuya dokunmadan önce hepsinin jar'ı hazır ve kapalı olmalı.
-    while IFS= read -r s; do
+    mapfile -t targets <<<"$list"
+
+    # Ön denetim: hiçbir sunucuya dokunmadan önce hepsinin ikilisi hazır ve kapalı olmalı.
+    for s in "${targets[@]}"; do
         ensure_server_dir "$s"
-        [[ -f $SERVERS_DIR/$s/server.jar ]] \
-            || die "$s: $SERVERS_DIR/$s/server.jar yok — önce 'mc download' çalıştırın."
+        bin=server.jar
+        if [[ $(server_get "$s" TYPE) == limbo ]]; then
+            bin=pico_limbo
+            has_limbo=1
+            [[ ! -e $SERVERS_DIR/$s/$bin || -x $SERVERS_DIR/$s/$bin ]] \
+                || die "$s: $SERVERS_DIR/$s/$bin çalıştırılabilir değil (chmod 0750)."
+        fi
+        [[ -f $SERVERS_DIR/$s/$bin ]] \
+            || die "$s: $SERVERS_DIR/$s/$bin yok — önce 'mc download' çalıştırın."
         if [[ $MC_NO_SYSTEMD != 1 ]] && is_running "$s"; then
             die "$s çalışıyor — önce 'mc stop $s'."
         fi
-    done <<<"$list"
+    done
+    if ((has_limbo)) && [[ $MC_NO_SYSTEMD != 1 ]]; then require_cmd ss; fi
 
-    while IFS= read -r s; do
+    for s in "${targets[@]}"; do
         init_one "$s"
-    done <<<"$list"
+    done
 
     if ((${#INIT_FAILED[@]})); then
         log_error "Bazı init komutları başarısız oldu: ${INIT_FAILED[*]} — günlüğü inceleyip 'mc rcon <sunucu> <komut>' ile tamamlayın."
@@ -556,6 +718,8 @@ doctor_memory() {
         d_warn "MemTotal okunamadı ($MEMINFO_FILE)."
     else
         while IFS= read -r s; do
+            # limbo (PicoLimbo) JVM değil; birkaç MB kullanır, hesaba katılmaz.
+            [[ $(server_get "$s" TYPE) != limbo ]] || continue
             h=$(server_get "$s" HEAP)
             if ! mib=$(heap_to_mib "$h"); then
                 d_warn "$s: HEAP='$h' anlaşılamadı."
@@ -652,36 +816,33 @@ doctor_ufw() {
 }
 
 doctor_ports() {
-    local out s p addrs a bad
+    local s p addrs bad hint
     if ! command -v ss >/dev/null 2>&1; then
         d_skip "dinlenen portlar (ss yok)"
         return 0
     fi
-    out=$(ss -ltn 2>/dev/null) || true
     while IFS= read -r s; do
         [[ -n $s ]] || continue
+        if [[ $(server_get "$s" TYPE) == limbo ]]; then
+            hint="server.toml'da bind = \"127.0.0.1:…\" olmalı (dışarıdan erişilen limbo girişi atlatır)"
+        else
+            hint="server-ip=127.0.0.1 ve rcon.ip=127.0.0.1 olmalı"
+        fi
         for p in "$(server_get "$s" PORT)" "$(server_get "$s" RCON_PORT)"; do
             [[ $p =~ ^[0-9]+$ ]] || continue
-            addrs=$(awk -v p="$p" 'NR > 1 { a = $4; i = length(a); while (i > 0 && substr(a, i, 1) != ":") i--; if (substr(a, i + 1) == p) print substr(a, 1, i - 1) }' <<<"$out")
+            addrs=$(listen_addrs "$p")
             if [[ -z $addrs ]]; then
                 d_ok "$s: $p dinlenmiyor (sunucu kapalı olabilir)."
                 continue
             fi
-            bad=""
-            while IFS= read -r a; do
-                a=${a%%%*}
-                case $a in
-                    127.* | '[::1]' | '[::ffff:127.'*) ;;
-                    *) bad+=" $a" ;;
-                esac
-            done <<<"$addrs"
+            bad=$(non_loopback <<<"$addrs")
             if [[ -n $bad ]]; then
-                d_crit "$s: $p dış arayüzde dinleniyor ($bad ) — server-ip=127.0.0.1 ve rcon.ip=127.0.0.1 olmalı."
+                d_crit "$s: $p dış arayüzde dinleniyor ($bad ) — $hint."
             else
                 d_ok "$s: $p yalnız 127.0.0.1'de."
             fi
         done
-    done < <(list_backends || true)
+    done < <(list_nonproxy)
 }
 
 doctor_disk() {
@@ -715,7 +876,10 @@ doctor_backup() {
         return 0
     fi
     # shellcheck disable=SC1090  # çalışma zamanında belirlenen dosya
-    repo=$(set -a && . "$BACKUP_ENV_FILE" && printf '%s' "${RESTIC_REPOSITORY:-}")
+    if ! repo=$(set -a && . "$BACKUP_ENV_FILE" && printf '%s' "${RESTIC_REPOSITORY:-}" 2>/dev/null); then
+        d_crit "$BACKUP_ENV_FILE okunamadı/bozuk (bash KEY=değer biçiminde olmalı)."
+        return 0
+    fi
     case $repo in
         "") d_warn "RESTIC_REPOSITORY tanımsız ($BACKUP_ENV_FILE)." ;;
         /* | local:*) d_warn "Yedek deposu yerel ($repo): disk/makine kaybına karşı korumaz — uzak depo (S3/B2/SFTP) ekleyin." ;;
@@ -756,16 +920,18 @@ print("yok" if best is None else int((datetime.datetime.now(datetime.timezone.ut
 }
 
 doctor_jars() {
-    local s
+    local s bin
     if [[ -d $SERVERS_DIR && ! -x $SERVERS_DIR ]]; then
         d_skip "sunucu jar'ları (root gerekir)"
         return 0
     fi
     while IFS= read -r s; do
-        if [[ -f $SERVERS_DIR/$s/server.jar ]]; then
-            d_ok "$s: server.jar var."
+        bin=server.jar
+        [[ $(server_get "$s" TYPE) != limbo ]] || bin=pico_limbo
+        if [[ -f $SERVERS_DIR/$s/$bin ]]; then
+            d_ok "$s: $bin var."
         else
-            d_crit "$s: $SERVERS_DIR/$s/server.jar yok — mc download all $s"
+            d_crit "$s: $SERVERS_DIR/$s/$bin yok — mc download all $s"
         fi
     done < <(list_servers)
 }
@@ -784,7 +950,9 @@ cmd_doctor() {
     doctor_backup
     doctor_jars
     if ((${#DOC_SKIPPED[@]})); then
-        log_info "Atlanan denetimler: $(printf '%s; ' "${DOC_SKIPPED[@]}")"
+        local skipped
+        skipped=$(printf '%s; ' "${DOC_SKIPPED[@]}")
+        log_info "Atlanan denetimler: ${skipped%; }"
     fi
     log_info "Özet: $DOC_WARN uyarı, $DOC_CRIT kritik."
     ((DOC_CRIT == 0))

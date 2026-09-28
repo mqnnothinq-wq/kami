@@ -21,3 +21,5 @@ https://hangarcdn.papermc.io/plugins/ViaVersion/ViaBackwards/versions/5.5.1/PAPE
 https://api.github.com/repos/jonesdevelopment/sonar/releases/latest	api/github-sonar-latest.json
 https://github.com/jonesdevelopment/sonar/releases/download/2.1.52/Sonar-Velocity.jar	payload/sonar-velocity.bin
 https://downloads.example.org/Example-1.0.jar	payload/example-url.bin
+https://api.github.com/repos/Quozul/PicoLimbo/releases/tags/v1.14.1%2Bmc26.3	api/github-picolimbo-v1.14.1.json
+https://github.com/Quozul/PicoLimbo/releases/download/v1.14.1%2Bmc26.3/pico_limbo_linux-x86_64-musl.tar.gz	payload/picolimbo.tar.gz

@@ -97,9 +97,9 @@ fails "github: dosya yoksa hata" jq_github_pick yok.jar <"$API/github-nodigest.j
 echo "== 2. plugins.list ayrıştırma"
 load_plugins_list "$FIX/config/plugins.list" 2>"$T/err"
 eq "geçerli liste: hatasız" "0" "$PL_ERRORS"
-eq "geçerli liste: 9 girdi (yorum/boş satırlar atlanır)" "9" "${#PL_NAME[@]}"
+eq "geçerli liste: 10 girdi (yorum/boş satırlar atlanır)" "10" "${#PL_NAME[@]}"
 names() { plugins_for "$1" "$2" | cut -d $'\x1f' -f1 | paste -sd' '; }
-eq "velocity eklentileri" "Geyser Floodgate LuckPerms Sonar" "$(names velocity velocity)"
+eq "velocity eklentileri" "Geyser Floodgate LuckPerms Sonar LibreLogin" "$(names velocity velocity)"
 eq "lobby eklentileri ('backends' dahil)" "LuckPerms ViaVersion ViaBackwards" "$(names lobby paper)"
 eq "survival eklentileri" "LuckPerms ViaVersion Chunky ViaBackwards Example" "$(names survival paper)"
 eq "backends, velocity'ye düşmez; yeni paper sunucusuna düşer" "ViaVersion ViaBackwards" "$(names yeni paper)"
@@ -110,7 +110,7 @@ eq "url + sha256 sütunu" "Example|url|https://downloads.example.org/Example-1.0
 load_plugins_list "$FIX/plugins-invalid.list" 2>"$T/err"
 rc=$?
 eq "hatalı liste: dönüş kodu 1" "1" "$rc"
-eq "hatalı liste: 9 satır reddedilir" "9" "$PL_ERRORS"
+eq "hatalı liste: 11 satır reddedilir" "11" "$PL_ERRORS"
 eq "hatalı liste: geçerli 2 satır kalır" "Gecerli1 Gecerli2" "${PL_NAME[*]}"
 eq "sha256 küçük harfe çevrilir" "4c55374f54e763fdff0ac5d4e7e4931defda5d1b06f1930f3e41c53680f280c7" "${PL_SHA[1]}"
 errs=$(<"$T/err")
@@ -123,6 +123,15 @@ has "eksik sütun" "plugins-invalid.list:8: 4 ya da 5 sütun" "$errs"
 has "github kimliği sahip/depo:dosya olmalı" "plugins-invalid.list:9: 'github' kaynağı için geçersiz kimlik" "$errs"
 has "url https olmalı" "plugins-invalid.list:10: 'url' kaynağı için geçersiz kimlik" "$errs"
 has "fazla sütun" "plugins-invalid.list:11: 4 ya da 5 sütun" "$errs"
+has "local: '..' reddedilir" "plugins-invalid.list:13: 'local' kaynağı için geçersiz kimlik" "$errs"
+has "local: .jar olmalı" "plugins-invalid.list:14: 'local' kaynağı için geçersiz kimlik" "$errs"
+eq "local: \$MC_ROOT önekli kimlik kabul edilir" "LibreLogin|local|\$MC_ROOT/artifacts/LibreLogin.jar||12" \
+    "$(load_plugins_list "$FIX/config/plugins.list" 2>/dev/null; plugins_for velocity velocity | grep '^LibreLogin' | row)"
+printf 'all Hepsi modrinth x\nlimbo Yanlis modrinth y\nbackends Arka modrinth z\n' >"$T/all.list"
+load_plugins_list "$T/all.list" 2>/dev/null
+eq "'all' paper'a düşer" "Hepsi Arka" "$(names lobby paper)"
+eq "'all' velocity'ye düşer" "Hepsi" "$(names velocity velocity)"
+eq "'all' ve 'backends' limbo'ya (Java değil) düşmez; yalnız açık ad" "Yanlis" "$(names limbo limbo)"
 load_plugins_list "$T/yok.list" 2>/dev/null
 eq "liste yoksa: uyarı, hata değil" "0|0" "$?|${#PL_NAME[@]}"
 
@@ -130,8 +139,9 @@ echo "== 3. uçtan uca (taklit ağ)"
 # Taklit ağ: urls.tsv'deki URL'leri $FXD altındaki dosyalarla yanıtlar; her çağrıyı kaydeder.
 FXD="$T/fx"
 cp -r "$FIX" "$FXD"
-CALLS="$T/calls"
+CALLS="$T/calls" ARGS="$T/args"
 : >"$CALLS"
+: >"$ARGS"
 lookup() { awk -F'\t' -v u="$1" '$1 == u { print $2; exit }' "$FXD/urls.tsv"; }
 http_get() {
     local rel
@@ -140,6 +150,11 @@ http_get() {
     rel=$(lookup "$1")
     [[ -n $rel ]] || { echo "MOCK: bilinmeyen URL $1" >&2; return 22; }
     printf 'GET %s\n' "$1" >>"$CALLS"
+    printf '%s\n' "$*" >>"$ARGS"
+    local a
+    for a in "$@"; do # -H @dosya: izinleri ve içeriği kaydet (jeton argv'de olmamalı)
+        if [[ $a == @* ]]; then printf 'HFILE %s %s\n' "$(stat -c %a "${a#@}")" "$(<"${a#@}")" >>"$ARGS"; fi
+    done
     cat -- "$FXD/$rel"
 }
 http_fetch() {
@@ -162,7 +177,8 @@ check() { # <ad> <koşul...>
     if "$@"; then ok "$n"; else bad "$n"; fi
 }
 
-mkdir -p "$SV"
+mkdir -p "$SV" "$MC_ROOT/artifacts"
+printf 'PK\003\004librelogin 39397c4 (test)\n' >"$MC_ROOT/artifacts/LibreLogin.jar"
 run_main --dry-run all
 rc=$?
 eq "kuru çalıştırma: başarılı" "0" "$rc"
@@ -182,7 +198,15 @@ eq ".server.jar.meta içeriği" "paper 26.2 16 $(sha "$FIX/payload/paper-26.2-16
 eq "Paper build'i bir kez sorgulanır (önbellek)" "1" "$(grep -c 'GET https://fill.papermc.io/v3/projects/paper/versions/26.2/builds' "$CALLS")"
 eq "jar izinleri 0640" "640" "$(stat -c %a "$SV/lobby/server.jar")"
 eq "hiç başlamamış sunucu: eklenti doğrudan plugins/" \
-    "Floodgate.jar Geyser.jar LuckPerms.jar Sonar.jar" "$(jars "$SV/velocity/plugins")"
+    "Floodgate.jar Geyser.jar LibreLogin.jar LuckPerms.jar Sonar.jar" "$(jars "$SV/velocity/plugins")"
+eq "local: LibreLogin artifacts/'tan kopyalanır" "$(sha "$MC_ROOT/artifacts/LibreLogin.jar")" "$(sha "$SV/velocity/plugins/LibreLogin.jar")"
+PICO_BIN=$(tar -xzOf "$FIX/payload/picolimbo.tar.gz" pico_limbo | sha256sum | cut -d' ' -f1)
+eq "limbo: PicoLimbo ikilisi arşivden çıkarılır" "$PICO_BIN" "$(sha "$SV/limbo/pico_limbo")"
+eq "limbo: ikili 0750 (çalıştırılabilir)" "750" "$(stat -c %a "$SV/limbo/pico_limbo")"
+eq "limbo: .pico_limbo.meta" "picolimbo v1.14.1+mc26.3 $(sha "$FIX/payload/picolimbo.tar.gz") $PICO_BIN" "$(<"$SV/limbo/.pico_limbo.meta")"
+eq "limbo: '+' URL'de %2B" "1" "$(grep -c 'FETCH https://github.com/Quozul/PicoLimbo/releases/download/v1.14.1%2Bmc26.3/pico_limbo_linux-x86_64-musl.tar.gz' "$CALLS")"
+check "limbo: jar/eklenti dizini oluşmaz" test ! -e "$SV/limbo/server.jar" -a ! -e "$SV/limbo/plugins"
+has "limbo: eklenti adımı atlanır" "limbo: TYPE=limbo Java sunucusu değil" "$(<"$T/out")"
 eq "survival eklentileri" "Chunky.jar Example.jar LuckPerms.jar ViaBackwards.jar ViaVersion.jar" \
     "$(jars "$SV/survival/plugins")"
 eq "LuckPerms bukkit/velocity doğru dosya" "$(sha "$FIX/payload/luckperms-bukkit.bin")|$(sha "$FIX/payload/luckperms-velocity.bin")" \
@@ -197,6 +221,7 @@ run_main all
 rc=$?
 eq "ikinci çalıştırma: başarılı" "0" "$rc"
 eq "ikinci çalıştırma: hiçbir şey indirilmez (güncel)" "0" "$(fetches)"
+has "ikinci çalıştırma: limbo güncel" "PicoLimbo v1.14.1+mc26.3" "$(grep 'güncel' "$T/out")"
 has "özet: güncel" "güncel" "$(<"$T/out")"
 
 # Sunucular bir kez çalışmış gibi; Paper'a yeni STABLE build, ViaVersion'a yeni sürüm gelir.
@@ -265,6 +290,168 @@ run_main --bilinmeyen
 eq "bilinmeyen seçenek: hata" "1" "$?"
 (main --help) >/dev/null 2>&1
 eq "--help: 0" "0" "$?"
+
+echo "== 4. limbo (PicoLimbo) güncelleme ve doğrulama"
+cp "$FIX/config/network.env" "$FXD/config/network.env"
+LAPI="$FXD/api/github-picolimbo-v1.14.1.json"
+TGZ="$FXD/payload/picolimbo.tar.gz"
+API_LINE=$(grep 'api.github.com/repos/Quozul' "$FIX/urls.tsv")
+mkarchive() { # <arşiv> <tür: elf|metin|bag> — tek üyeli "pico_limbo" arşivi
+    local d
+    d=$(mktemp -d)
+    case $2 in
+        elf) printf '\177ELF %s\n' "$RANDOM$RANDOM" >"$d/pico_limbo" ;;
+        metin) printf '#!/bin/sh\necho merhaba\n' >"$d/pico_limbo" ;;
+        bag) ln -s /etc/passwd "$d/pico_limbo" ;;
+    esac
+    tar -C "$d" -czf "$1" pico_limbo
+    rm -rf -- "$d"
+}
+set_digest() { # <sha256|boş>
+    jq --arg h "$1" '(.assets[] | select(.name == "pico_limbo_linux-x86_64-musl.tar.gz") | .digest) = $h' \
+        "$FIX/api/github-picolimbo-v1.14.1.json" >"$LAPI"
+}
+limbo_state() { find "$SV/limbo" -maxdepth 1 -name 'pico_limbo*' -printf '%f\n' | sort | paste -sd' '; }
+
+mkarchive "$TGZ" elf
+set_digest "sha256:$(sha "$TGZ")"
+NEWBIN=$(tar -xzOf "$TGZ" pico_limbo | sha256sum | cut -d' ' -f1)
+: >"$CALLS"
+run_main core limbo
+eq "yeni arşiv (aynı sürüm, yeni digest): başarılı" "0" "$?"
+eq "var olan ikili varken pico_limbo.new olarak konur" "$NEWBIN" "$(sha "$SV/limbo/pico_limbo.new")"
+eq "çalışan pico_limbo'ya dokunulmaz" "$PICO_BIN" "$(sha "$SV/limbo/pico_limbo")"
+eq "pico_limbo.new 0750" "750" "$(stat -c %a "$SV/limbo/pico_limbo.new")"
+: >"$CALLS"
+run_main core limbo
+eq "bekleyen güncelleme varken tekrar indirilmez" "0|0" "$?|$(fetches)"
+
+# GitHub API'ye ulaşılamıyor: kurulu sürüm güncel sayılır; yeni kurulum yalnız HTTPS'e güvenir
+grep -v 'api.github.com/repos/Quozul' "$FXD/urls.tsv" >"$T/u" && cp "$T/u" "$FXD/urls.tsv"
+: >"$CALLS"
+run_main core limbo
+eq "API yokken: kurulu sürüm güncel (indirme yok)" "0|0" "$?|$(fetches)"
+has "API yokken: uyarı" "GitHub API yanıtı alınamadı" "$(<"$T/out")"
+rm -rf -- "$SV/limbo"
+run_main core limbo
+eq "API yokken yeni kurulum: başarılı" "0" "$?"
+has "API yokken: doğrulanamadı uyarısı" "yalnızca HTTPS'e güveniliyor" "$(<"$T/out")"
+eq "API yokken: ikili yerinde" "$NEWBIN" "$(sha "$SV/limbo/pico_limbo")"
+rm -rf -- "$SV/limbo"
+printf 'PICOLIMBO_SHA256="%s"\n' "$(printf '0%.0s' {1..64})" >>"$FXD/config/network.env"
+run_main core limbo
+eq "PICOLIMBO_SHA256 sabiti uyuşmazsa: hata" "1|" "$?|$(limbo_state)"
+has "sabit uyuşmazlığı raporlanır" "SHA-256 uyuşmuyor" "$(<"$T/out")"
+cp "$FIX/config/network.env" "$FXD/config/network.env"
+printf '%s\n' "$API_LINE" >>"$FXD/urls.tsv"
+
+set_digest "sha256:$(printf '1%.0s' {1..64})"
+run_main core limbo
+eq "digest uyuşmazsa: hata, dosya yazılmaz" "1|" "$?|$(limbo_state)"
+has "digest uyuşmazlığı raporlanır" "SHA-256 uyuşmuyor" "$(<"$T/out")"
+mkarchive "$TGZ" bag
+set_digest "sha256:$(sha "$TGZ")"
+run_main core limbo
+eq "arşivde pico_limbo sembolik bağsa: reddedilir" "1|" "$?|$(limbo_state)"
+has "bağ reddi raporlanır" "düzenli 'pico_limbo' dosyası yok" "$(<"$T/out")"
+mkarchive "$TGZ" metin
+set_digest "sha256:$(sha "$TGZ")"
+run_main core limbo
+eq "ELF olmayan ikili reddedilir" "1|" "$?|$(limbo_state)"
+has "ELF reddi raporlanır" "ELF ikilisi değil" "$(<"$T/out")"
+
+echo "== 5. local kaynak (LibreLogin)"
+LL="$MC_ROOT/artifacts/LibreLogin.jar"
+# shellcheck disable=SC2016  # plugins.list'te '$MC_ROOT' birebir yazılır; download.sh kendisi açar
+MCR='$MC_ROOT'
+printf 'velocity LibreLogin local %s/artifacts/LibreLogin.jar\n' "$MCR" >"$T/local.list"
+: >"$CALLS"
+PLUGINS_LIST="$T/local.list" run_main plugins velocity
+eq "değişmeyen yerel jar: güncel, kopyalanmaz" "0|" "$?|$(find "$SV/velocity/plugins" -path '*update*' -name 'LibreLogin.jar')"
+printf 'PK\003\004librelogin yeni derleme\n' >"$LL"
+PLUGINS_LIST="$T/local.list" run_main plugins velocity
+eq "yeni derleme: plugins/update/ altına konur" "0|$(sha "$LL")" "$?|$(sha "$SV/velocity/plugins/update/LibreLogin.jar")"
+printf '%s  LibreLogin.jar\n' "$(printf 'a%.0s' {1..64})" >"$LL.sha256"
+PLUGINS_LIST="$T/local.list" run_main plugins velocity
+eq "yan .sha256 dosyası uyuşmazsa: hata" "1" "$?"
+has "yan özet hatası" "LibreLogin.jar.sha256 ile uyuşmuyor" "$(<"$T/out")"
+sha256sum "$LL" | sed 's#  .*#  LibreLogin.jar#' >"$LL.sha256"
+PLUGINS_LIST="$T/local.list" run_main plugins velocity
+eq "yan .sha256 uyuşuyorsa: başarılı" "0" "$?"
+printf 'velocity LibreLogin local %s/artifacts/LibreLogin.jar %s\n' "$MCR" "$(printf 'b%.0s' {1..64})" >"$T/local.list"
+PLUGINS_LIST="$T/local.list" run_main plugins velocity
+eq "5. sütun sabiti uyuşmazsa: hata" "1" "$?"
+has "sabit uyuşmazlığı" "sabit sha256 uyuşmuyor" "$(<"$T/out")"
+printf 'velocity LibreLogin local %s/artifacts/Yok.jar\n' "$MCR" >"$T/local.list"
+PLUGINS_LIST="$T/local.list" run_main plugins velocity
+eq "olmayan yerel dosya: hata" "1" "$?"
+has "olmayan dosya mesajı" "local: dosya yok" "$(<"$T/out")"
+ln -s /etc/passwd "$MC_ROOT/artifacts/Kacak.jar"
+printf 'velocity Kacak local %s/artifacts/Kacak.jar\nvelocity Mutlak local /etc/Mutlak.jar\n' "$MCR" >"$T/local.list"
+PLUGINS_LIST="$T/local.list" run_main plugins velocity
+eq "artifacts dışına çıkan bağ ve mutlak yol: hata" "1|" "$?|$(find "$SV/velocity/plugins" -name 'Kacak.jar' -o -name 'Mutlak.jar')"
+eq "ikisi de reddedilir" "2" "$(grep -c 'artifacts/ altında değil' "$T/out")"
+
+echo "== 6. GITHUB_TOKEN komut satırına girmez"
+: >"$ARGS"
+GITHUB_TOKEN=gizli-jeton-123 run_main --dry-run core limbo
+eq "kuru çalıştırma: başarılı" "0" "$?"
+eq "jeton argv'de yok" "0" "$(grep -v '^HFILE' "$ARGS" | grep -c 'gizli-jeton-123')"
+has "başlık dosyadan (-H @...)" "-H @" "$(<"$ARGS")"
+has "başlık dosyası 0600 ve doğru içerik" "HFILE 600 Authorization: Bearer gizli-jeton-123" "$(<"$ARGS")"
+
+echo "== 7. sembolik bağ saldırısı (root + nobody)"
+if [[ $(id -u) -eq 0 ]] && NB_UID=$(id -u nobody 2>/dev/null); then
+    NB_GID=$(id -g nobody)
+    rm -rf -- "$FXD"
+    cp -r "$FIX" "$FXD"
+    chmod 0755 "$T"
+    R2="$T/r2" S2="$T/r2/servers"
+    mkdir -p "$S2" "$T/disari1" "$T/disari2"
+    for v in 1 2 3 4; do
+        printf '%s\n' "root:\$6\$GIZLI$v" >"$T/kurban$v"
+        chmod 0600 "$T/kurban$v"
+    done
+    # lobby: güncel jar + meta bağı; plugins/update başka yere bağ
+    mkdir -p "$S2/lobby/plugins" "$S2/lobby/logs"
+    : >"$S2/lobby/logs/latest.log"
+    cp "$FIX/payload/paper-26.2-16.bin" "$S2/lobby/server.jar"
+    ln -s "$T/kurban1" "$S2/lobby/.server.jar.meta"
+    ln -s "$T/disari2" "$S2/lobby/plugins/update"
+    # velocity: eski jar, server.jar.new ve .plugins.meta bağ
+    mkdir -p "$S2/velocity/plugins"
+    printf 'PK\003\004eski\n' >"$S2/velocity/server.jar"
+    ln -s "$T/kurban2" "$S2/velocity/.plugins.meta"
+    ln -s "$T/kurban3" "$S2/velocity/server.jar.new"
+    # limbo: meta bağ; survival: dizinin kendisi bağ
+    mkdir -p "$S2/limbo"
+    ln -s "$T/kurban4" "$S2/limbo/.pico_limbo.meta"
+    ln -s "$T/disari1" "$S2/survival"
+    chown -R -h "$NB_UID:$NB_GID" "$S2"
+    printf 'velocity LuckPerms luckperms velocity\nlobby LuckPerms luckperms bukkit\n' >"$T/sym.list"
+    (
+        MC_ROOT=$R2 SERVERS_DIR=$S2 MC_USER=nobody PLUGINS_LIST="$T/sym.list"
+        main all
+    ) >"$T/out" 2>&1
+    eq "saldırı senaryosu: hata raporlanır (survival, lobby update)" "1" "$?"
+    for v in 1 2 3 4; do
+        eq "kurban$v değişmedi (içerik, 0600, root)" "root:\$6\$GIZLI$v|600|root" \
+            "$(<"$T/kurban$v")|$(stat -c %a "$T/kurban$v")|$(stat -c %U "$T/kurban$v")"
+    done
+    check "lobby .server.jar.meta artık düzenli dosya" test -f "$S2/lobby/.server.jar.meta" -a ! -L "$S2/lobby/.server.jar.meta"
+    eq "lobby meta içeriği" "paper 26.2 16 $(sha "$FIX/payload/paper-26.2-16.bin")" "$(<"$S2/lobby/.server.jar.meta")"
+    eq "yazılan dosyalar minecraft (nobody) sahipli" "nobody nobody nobody nobody" \
+        "$(stat -c %U "$S2/lobby/.server.jar.meta" "$S2/velocity/.plugins.meta" "$S2/velocity/server.jar.new" "$S2/limbo/pico_limbo" | paste -sd' ')"
+    check "velocity server.jar.new bağın yerine gerçek dosya" test -f "$S2/velocity/server.jar.new" -a ! -L "$S2/velocity/server.jar.new"
+    eq "velocity server.jar.new = Velocity 4.2.0" "$(sha "$FIX/payload/velocity-4.2.0-520.bin")" "$(sha "$S2/velocity/server.jar.new")"
+    has ".plugins.meta düzenli ve LuckPerms içerir" "LuckPerms"$'\t' "$(<"$S2/velocity/.plugins.meta")"
+    check ".plugins.meta kurban içeriğini sızdırmaz" test "$(grep -c GIZLI "$S2/velocity/.plugins.meta")" = 0
+    eq "dışarıdaki dizinlere hiçbir şey yazılmaz" "" "$(find "$T/disari1" "$T/disari2" -mindepth 1)"
+    has "bağlı sunucu dizini reddedilir" "Güvenlik: $S2/survival sembolik bağ" "$(<"$T/out")"
+    has "bağlı plugins/update reddedilir" "Güvenlik: $S2/lobby/plugins/update sembolik bağ" "$(<"$T/out")"
+else
+    echo "  (atlandı: root ve 'nobody' kullanıcısı gerekir)"
+fi
 
 echo
 echo "Sonuç: $PASS başarılı, $FAILN başarısız"

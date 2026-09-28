@@ -10,3 +10,5 @@ lobby         GitHubBozuk  github      sahip-depo-dosya
 lobby         HttpUrl      url         http://example.org/z.jar    4c55374f54e763fdff0ac5d4e7e4931defda5d1b06f1930f3e41c53680f280c7
 lobby         Fazla        modrinth    x   4c55374f54e763fdff0ac5d4e7e4931defda5d1b06f1930f3e41c53680f280c7  ekstra
 survival      Gecerli2     hangar      ViaBackwards   4C55374F54E763FDFF0AC5D4E7E4931DEFDA5D1B06F1930F3E41C53680F280C7
+lobby         YerelKacak   local       $MC_ROOT/artifacts/../../etc/x.jar
+lobby         YerelJarDegil local      $MC_ROOT/artifacts/x.sh

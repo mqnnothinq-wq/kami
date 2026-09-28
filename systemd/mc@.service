@@ -1,4 +1,5 @@
-# Tek şablon: Paper backend'leri ve Velocity proxy'si (mc@velocity, mc@lobby, mc@survival ...).
+# Tek şablon: Paper backend'leri, Velocity proxy'si ve PicoLimbo (mc@velocity, mc@lobby, mc@limbo ...).
+# limbo (Java değil): mc apply, mc@limbo.service.d/30-exec.conf ile ExecStart'ı pico_limbo'ya çevirir.
 # Sunucuya özgü ayarlar:
 #   /opt/minecraft/servers/%i/jvm.env                  (JAVA_MEM, JAVA_OPTS, SERVER_ARGS — mc apply üretir)
 #   /etc/systemd/system/mc@%i.service.d/20-resources.conf (CPUWeight, OOMScoreAdjust — mc apply üretir)
@@ -20,8 +21,9 @@ EnvironmentFile=/etc/minecraft/secrets.env
 EnvironmentFile=/opt/minecraft/servers/%i/jvm.env
 Environment=LANG=C.UTF-8
 
-# Bekleyen güncellemeleri uygula (mc download bunları hazırlar; çalışan sunucunun jar'ına dokunulmaz):
+# Bekleyen güncellemeleri uygula (mc download bunları hazırlar; çalışan sunucunun dosyalarına dokunulmaz):
 #   server.jar.new varsa -> eski jar server.jar.old olur, yenisi server.jar olur
+#   pico_limbo.new varsa (TYPE=limbo) -> aynı şekilde pico_limbo.old / pico_limbo, çalıştırılabilir
 #   plugins/update/*.jar -> plugins/ altına taşınır (aynı adlı dosyanın üzerine yazar)
 # Not: systemd '$' işaretini kendisi genişletir; kabuğun görmesi gereken '$' burada '$$' yazılır.
 ExecStartPre=/bin/sh -c 'set -e; \
@@ -29,6 +31,12 @@ ExecStartPre=/bin/sh -c 'set -e; \
     if [ -f server.jar ]; then mv -f server.jar server.jar.old; fi; \
     mv -f server.jar.new server.jar; \
     echo "server.jar yeni sürümle değiştirildi"; \
+  fi; \
+  if [ -f pico_limbo.new ]; then \
+    if [ -f pico_limbo ]; then mv -f pico_limbo pico_limbo.old; fi; \
+    mv -f pico_limbo.new pico_limbo; \
+    chmod 0750 pico_limbo; \
+    echo "pico_limbo yeni sürümle değiştirildi"; \
   fi; \
   if [ -d plugins/update ]; then \
     for f in plugins/update/*.jar; do \

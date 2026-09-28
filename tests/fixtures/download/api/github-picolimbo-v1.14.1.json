@@ -1,0 +1,18 @@
+{
+  "tag_name": "v1.14.1+mc26.3",
+  "name": "v1.14.1+mc26.3",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "pico_limbo_linux-aarch64-musl.tar.gz",
+      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "browser_download_url": "https://github.com/Quozul/PicoLimbo/releases/download/v1.14.1%2Bmc26.3/pico_limbo_linux-aarch64-musl.tar.gz"
+    },
+    {
+      "name": "pico_limbo_linux-x86_64-musl.tar.gz",
+      "digest": "sha256:f3bb383840bd20bdf79413bfb3ed23c915a16481cc716c5c1efa5fa9f4411540",
+      "browser_download_url": "https://github.com/Quozul/PicoLimbo/releases/download/v1.14.1%2Bmc26.3/pico_limbo_linux-x86_64-musl.tar.gz"
+    }
+  ]
+}

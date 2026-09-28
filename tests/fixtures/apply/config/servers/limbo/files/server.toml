@@ -1,0 +1,8 @@
+# PicoLimbo yapılandırması (test fikstürü)
+bind = "127.0.0.1:@@PORT@@"
+default_game_mode = "spectator"
+
+[forwarding]
+method = "MODERN"
+# PicoLimbo'nun kendi ortam yer tutucusu: bizim @@ işlememiz dokunmamalı.
+secret = "${VELOCITY_FORWARDING_SECRET}"

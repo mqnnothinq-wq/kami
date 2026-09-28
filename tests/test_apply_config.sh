@@ -103,7 +103,7 @@ check "yml yorum korundu (dizi dosyası)" has "$PW" "# Paper dünya varsayılanl
 
 echo "# bilinmeyen anahtar uyarısı"
 check "bilinmeyen yaprak yol uyarıldı" grep -qF "'eski-ayar.alt-anahtar' hedefte yok" <<<"$OUT"
-check "bilinen yollar uyarılmadı" bash -c '! grep -F "hedefte yok" <<<"$1" | grep -vqF "eski-ayar.alt-anahtar"' _ "$OUT"
+check "bilinen yollar uyarılmadı (tek uyarı)" test "$(grep -c "hedefte yok" <<<"$OUT")" -eq 1
 check "bilinmeyen anahtar yine de yazıldı" yq_is "$PG" '.eski-ayar.alt-anahtar' true
 
 echo "# plugins/ kuralları"
@@ -147,13 +147,45 @@ check "velocity jvm.env SERVER_ARGS boş" line_is "$V/jvm.env" 'SERVER_ARGS=""'
 check "velocity jvm.env GC=1 → ConcGCThreads=1 + EXTRA sonda" line_is "$V/jvm.env" 'JAVA_OPTS="-XX:+UseG1GC -XX:G1HeapRegionSize=4M -XX:ParallelGCThreads=1 -XX:ConcGCThreads=1 -XX:+ExitOnOutOfMemoryError"'
 check "survival jvm.env GC_THREADS boş → GC bayrağı yok" line_is "$T/root/servers/survival/jvm.env" 'JAVA_OPTS="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -Duser.language=en -Duser.country=US -XX:+UseCompactObjectHeaders"'
 check "survival jvm.env JAVA_MEM" line_is "$T/root/servers/survival/jvm.env" 'JAVA_MEM="-Xms7G -Xmx7G"'
-check "velocity 10-order.conf tüm backend'ler" line_is "$T/systemd/mc@velocity.service.d/10-order.conf" "After=mc@lobby.service mc@survival.service"
+check "velocity 10-order.conf tüm backend'ler (limbo dahil)" line_is "$T/systemd/mc@velocity.service.d/10-order.conf" "After=mc@limbo.service mc@lobby.service mc@survival.service"
 check "velocity 20-resources.conf negatif OOM" line_is "$T/systemd/mc@velocity.service.d/20-resources.conf" "OOMScoreAdjust=-200"
 check "yeni dizinler 0750" mode_is "$V/plugins/sonar" 750
+
+echo "# limbo (PicoLimbo, TYPE=limbo — SPEC §17)"
+L="$T/root/servers/limbo"
+LD="$T/systemd/mc@limbo.service.d"
+check "limbo jvm.env üretildi: JAVA_MEM boş" line_is "$L/jvm.env" 'JAVA_MEM=""'
+check "limbo jvm.env: JAVA_OPTS boş" line_is "$L/jvm.env" 'JAVA_OPTS=""'
+check "limbo jvm.env: SERVER_ARGS boş" line_is "$L/jvm.env" 'SERVER_ARGS=""'
+check "limbo 30-exec.conf [Service]" line_is "$LD/30-exec.conf" "[Service]"
+check "limbo 30-exec.conf ExecStart sıfırlanır" line_is "$LD/30-exec.conf" "ExecStart="
+check "limbo 30-exec.conf pico_limbo ExecStart" line_is "$LD/30-exec.conf" "ExecStart=/opt/minecraft/servers/%i/pico_limbo --config server.toml"
+check "limbo 30-exec.conf sırası: sıfırlama önce" test "$(grep '^ExecStart=' "$LD/30-exec.conf" | head -n1)" = "ExecStart="
+check "limbo 20-resources.conf CPUWeight=50" line_is "$LD/20-resources.conf" "CPUWeight=50"
+check "limbo 20-resources.conf OOMScoreAdjust=300" line_is "$LD/20-resources.conf" "OOMScoreAdjust=300"
+check "limbo server.toml @@PORT@@ işlendi" line_is "$L/server.toml" 'bind = "127.0.0.1:30065"'
+check "limbo server.toml PicoLimbo'nun kendi \${…} yer tutucusu korundu" line_is "$L/server.toml" 'secret = "${VELOCITY_FORWARDING_SECRET}"'
+check "paper'a 30-exec.conf yazılmadı" test ! -e "$T/systemd/mc@lobby.service.d/30-exec.conf"
+check "velocity'ye 30-exec.conf yazılmadı" test ! -e "$T/systemd/mc@velocity.service.d/30-exec.conf"
+apply limbo
+check "limbo ikinci apply değişiklik yok" grep -qF "0 dosya yazıldı" <<<"$OUT"
+
+echo "# eskiden üretilmiş drop-in (tür değişti) silinir; elle yazılana dokunulmaz"
+printf '# mc apply tarafından üretildi (TYPE=limbo) — elle düzenlemeyin.\n[Service]\nExecStart=\n' \
+    >"$T/systemd/mc@lobby.service.d/30-exec.conf"
+printf '# yöneticinin kendi dosyası\n[Unit]\nAfter=x.service\n' >"$T/systemd/mc@survival.service.d/10-order.conf"
+apply --dry-run lobby survival
+check "dry-run: eski drop-in 'silinecek' listelendi" grep -qF "[silinecek]" <<<"$OUT"
+check "dry-run: eski drop-in yerinde" test -e "$T/systemd/mc@lobby.service.d/30-exec.conf"
+apply lobby survival
+check "tür değişince eski 30-exec.conf silindi" test ! -e "$T/systemd/mc@lobby.service.d/30-exec.conf"
+check "silme bildirildi" grep -qF "[silindi]" <<<"$OUT"
+check "elle yazılmış drop-in'e dokunulmadı" line_is "$T/systemd/mc@survival.service.d/10-order.conf" "After=x.service"
 
 echo "# dry-run hiçbir şey yazmaz"
 setup
 seed_existing
+printf 'api.token=gizli-deger-123\n' >>"$REPO/config/servers/lobby/files/server.properties"
 before=$(snapshot "$T/root" "$T/systemd")
 apply --dry-run all
 after=$(snapshot "$T/root" "$T/systemd")
@@ -162,6 +194,10 @@ check "dry-run MC_ROOT ve systemd dizinini değiştirmedi" test "$before" = "$af
 check "dry-run yeni dosyayı listeledi" grep -qF "[yeni]" <<<"$OUT"
 check "dry-run değişecek dosyayı ve farkı gösterdi" grep -qF "+rcon.port=31066" <<<"$OUT"
 check "dry-run kipini bildirdi" grep -qF "hiçbir dosya yazılmadı" <<<"$OUT"
+check "dry-run farkında RCON şifresi maskelendi" grep -qF "+rcon.password=***" <<<"$OUT"
+check "dry-run farkında DB şifresi maskelendi (anahtar adına göre)" grep -qE '^ +\+ +password: \*\*\*$' <<<"$OUT"
+check "dry-run: secrets.env dışı token anahtarı da maskelendi" grep -qF "+api.token=***" <<<"$OUT"
+check "dry-run çıktısında gizli değer yok" test "$(grep -cE 'test-rcon|test-db|gizli-deger-123' <<<"$OUT")" -eq 0
 
 echo "# tanımsız yer tutucu: hiçbir dosya yazılmaz"
 setup
@@ -200,6 +236,87 @@ check "geçersiz HEAP'te hiçbir şey yazılmadı" test -z "$(ls -A "$T/root/ser
 apply --help
 check "--help çalışır" test "$RC" -eq 0
 check "--help Türkçe kullanım" grep -qF "Kullanım: mc apply" <<<"$OUT"
+
+echo "# yml: sunucu dosyayı kendi biçimiyle yeniden yazınca apply değişiklik saymaz"
+setup
+seed_existing
+apply lobby
+# Paper/SnakeYAML biçimini taklit et: dizi girintisi farklı, dize tırnaklı (veri aynı).
+sed -i 's/^      - /    - /' "$SRV/config/paper-world-defaults.yml"
+sed -i "s/^  password: test-db\$/  password: 'test-db'/" "$SRV/plugins/LuckPerms/config.yml"
+check "(ön koşul) biçim gerçekten değişti" grep -qxF "    - diamond_ore" "$SRV/config/paper-world-defaults.yml"
+check "(ön koşul) tırnak gerçekten değişti" grep -qxF "  password: 'test-db'" "$SRV/plugins/LuckPerms/config.yml"
+before=$(snapshot "$T/root")
+apply lobby
+check "yeniden biçimlenmiş yml: 0 dosya yazıldı" grep -qF "0 dosya yazıldı" <<<"$OUT"
+check "yeniden biçimlenmiş yml: sunucunun biçimi korundu" test "$before" = "$(snapshot "$T/root")"
+sed -i 's/engine-mode: 2/engine-mode: 1/' "$SRV/config/paper-world-defaults.yml"
+apply lobby
+check "gerçek veri farkı yine uygulanır" yq_is "$SRV/config/paper-world-defaults.yml" '.anticheat.anti-xray.engine-mode' 2
+check "gerçek veri farkı 1 dosya yazdı" grep -qF "1 dosya yazıldı" <<<"$OUT"
+
+echo "# izin/sahiplik düzeltme (içerik aynı)"
+chmod 0644 "$SRV/jvm.env"
+apply lobby
+check "yanlış mod düzeltildi (0640)" mode_is "$SRV/jvm.env" 640
+check "izin düzeltmesi bildirildi" grep -qF "[izin düzeltildi]" <<<"$OUT"
+
+echo "# güvenlik: sunucu dizinindeki sembolik bağlar izlenmez"
+setup
+seed_existing
+mkdir -p "$T/kurban/LuckPerms"
+printf 'dokunulmamali: evet\n' >"$T/kurban/LuckPerms/config.yml"
+printf 'kurban=1\n' >"$T/kurban/dosya"
+rm -rf "$SRV/plugins"
+ln -s "$T/kurban" "$SRV/plugins"
+before=$(snapshot "$T/root" "$T/systemd" "$T/kurban")
+apply lobby
+check "sembolik bağlı üst dizin reddedildi" test "$RC" -ne 0
+check "hata mesajı sembolik bağı adlandırdı" grep -qF "$SRV/plugins sembolik bağ" <<<"$OUT"
+check "sembolik bağda HİÇBİR dosya yazılmadı (kurban dahil)" test "$before" = "$(snapshot "$T/root" "$T/systemd" "$T/kurban")"
+rm "$SRV/plugins"
+mv "$SRV/server.properties" "$T/sp"
+ln -s "$T/kurban/dosya" "$SRV/server.properties"
+apply --dry-run lobby
+check "sembolik bağ hedef dosya (dry-run da) reddedildi" grep -qF "$SRV/server.properties sembolik bağ" <<<"$OUT"
+check "kurban dosyası okunup basılmadı" test "$(grep -c 'kurban=1' <<<"$OUT")" -eq 0
+apply lobby
+check "sembolik bağ hedef dosya reddedildi" test "$RC" -ne 0
+check "kurban dosyası değişmedi" test "$(cat "$T/kurban/dosya")" = "kurban=1"
+rm "$SRV/server.properties"
+mv "$SRV" "$T/lobby-gercek"
+ln -s "$T/lobby-gercek" "$SRV"
+apply lobby
+check "sunucu dizininin kendisi sembolik bağsa reddedildi" grep -qF "$SRV sembolik bağ" <<<"$OUT"
+
+if [[ ${EUID:-$(id -u)} -eq 0 ]] && id daemon >/dev/null 2>&1; then
+    echo "# root iken yazma sahibinin (MC_USER) kimliğiyle yapılır"
+    setup
+    seed_existing
+    chmod 0755 "$T" "$T/root"
+    chown -R daemon:daemon "$T/root/servers"
+    MC_USER=daemon apply lobby survival
+    check "MC_USER=daemon apply başarılı" test "$RC" -eq 0
+    check "yazılan dosya daemon:daemon 0640" test "$(stat -c '%U:%G %a' "$SRV/jvm.env")" = "daemon:daemon 640"
+    check "birleştirilen dosya daemon:daemon" test "$(stat -c '%U:%G' "$SRV/server.properties")" = "daemon:daemon"
+    check "oluşturulan sunucu dizini daemon:daemon 0750" test "$(stat -c '%U:%G %a' "$T/root/servers/survival")" = "daemon:daemon 750"
+    check "oluşturulan alt dizin daemon:daemon 0750" test "$(stat -c '%U:%G %a' "$T/root/servers/survival/config")" = "daemon:daemon 750"
+    check "drop-in root'a ait kalır" test "$(stat -c '%U' "$T/systemd/mc@lobby.service.d/20-resources.conf")" = "root"
+    chown root:root "$SRV/config"
+    chmod 0755 "$SRV/config"
+    before=$(snapshot "$T/root")
+    MC_USER=daemon apply lobby
+    check "daemon'ın yazamadığı dizin: apply reddetti (root yetkisiyle yazmadı)" test "$RC" -ne 0
+    check "yazılamayan dizin hata mesajı" grep -qF "$SRV/config daemon tarafından yazılamıyor" <<<"$OUT"
+    check "yazılamayan dizinde hiçbir dosya yazılmadı" test "$before" = "$(snapshot "$T/root")"
+    chown daemon:daemon "$SRV/config"
+    chown root:root "$SRV/config/paper-global.yml"
+    chmod 0600 "$SRV/config/paper-global.yml"
+    MC_USER=daemon apply --dry-run lobby
+    check "daemon'ın okuyamadığı dosya root ile okunmadı" grep -qF "paper-global.yml daemon tarafından okunamıyor" <<<"$OUT"
+else
+    echo "# (atlandı: root değil ya da 'daemon' kullanıcısı yok — kimlik düşürme testleri)"
+fi
 
 printf '\ntest_apply_config: %d geçti, %d başarısız\n' "$PASS" "$FAIL"
 ((FAIL == 0))

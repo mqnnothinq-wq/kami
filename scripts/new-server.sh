@@ -95,7 +95,7 @@ insert_velocity_entry() { # <toml> <ad> <adres>
 }
 
 main() {
-    local name="" port="" heap="" from="survival" args=() rcon s v p toml_rel rc reserved reserved_ports=()
+    local name="" port="" heap="" from="survival" args=() rcon s v p toml_rel rc reserved reserved_ports=() listening
     while (($#)); do
         case $1 in
             --from)
@@ -122,7 +122,8 @@ main() {
     validate_server_name "$name"
     [[ ! -e $CONFIG_DIR/servers/$name ]] || die "Zaten var: config/servers/$name"
     server_exists "$from" || die "Kaynak sunucu tanımsız: $from (mevcut: $(list_servers | paste -sd' ' -))"
-    [[ $(server_get "$from" TYPE) == paper ]] || die "Kaynak paper olmalı ('$from' değil); proxy kopyalanamaz."
+    s=$(server_get "$from" TYPE)
+    [[ $s == paper ]] || die "Kaynak bir paper sunucusu olmalı ('$from' türü: $s; velocity/limbo kopyalanamaz)."
     if ! [[ $port =~ ^[1-9][0-9]*$ ]] || ((port < 1024 || port > 64535)); then
         die "Geçersiz port: '$port' (1024-64535; RCON portu port+1000 olur)."
     fi
@@ -143,8 +144,9 @@ main() {
     for p in "${reserved_ports[@]}"; do
         [[ $p != "$port" && $p != "$rcon" ]] || die "Port $p network.env'de ayrılmış (genel/veritabanı portu)."
     done
-    if command -v ss >/dev/null 2>&1 && ss -Hltn "( sport = :$port or sport = :$rcon )" 2>/dev/null | grep -q .; then
-        log_warn "Port $port ya da $rcon bu makinede şu an dinleniyor; başka bir süreç kullanıyor olabilir."
+    if command -v ss >/dev/null 2>&1; then
+        listening=$(ss -Hltn "( sport = :$port or sport = :$rcon )" 2>/dev/null || true)
+        [[ -z $listening ]] || log_warn "Port $port ya da $rcon bu makinede şu an dinleniyor; başka bir süreç kullanıyor olabilir."
     fi
 
     # Velocity girişini önce hazırla: başarısız olursa hiçbir şey değişmemiş olur.

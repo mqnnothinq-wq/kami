@@ -9,7 +9,8 @@ player-info-forwarding-mode = "MODERN"
 forwarding-secret-file = ""
 
 [servers]
-# Backend sunucular (yalnız 127.0.0.1)
+# Backend sunucular (yalnız 127.0.0.1); limbo ASLA "try" listesine girmez
+limbo = "127.0.0.1:30065"
 lobby = "127.0.0.1:30066"
 survival = "127.0.0.1:30067"
 

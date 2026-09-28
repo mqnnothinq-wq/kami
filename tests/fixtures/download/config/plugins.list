@@ -9,5 +9,6 @@ backends           ViaVersion    modrinth    viaversion
 survival           Chunky        modrinth    chunky
 backends           ViaBackwards  hangar      ViaBackwards
 survival           Example       url         https://downloads.example.org/Example-1.0.jar   4c55374f54e763fdff0ac5d4e7e4931defda5d1b06f1930f3e41c53680f280c7
+velocity           LibreLogin    local       $MC_ROOT/artifacts/LibreLogin.jar
 
    # girintili yorum satırı
