@@ -131,7 +131,7 @@ bütçesini denetler, sonraki adımları yazdırır. Ayrıntı: [docs/07](07-olc
 
 ```bash
 sudo mc build-librelogin                   # network.env LIBRELOGIN_COMMIT
-sudo mc build-librelogin --commit 39397c4  # başka commit (network.env ve plugins.list'i de güncelleyin)
+sudo mc build-librelogin --commit <sha>    # başka commit (network.env ve plugins.list'i de güncelleyin)
 sudo mc build-librelogin --keep-jdk        # derleme için kurulan temurin-25-jdk'yı bırak
 sudo mc build-librelogin --dry-run         # yalnız ne yapılacağını yazar
 # aynı betik: sudo /opt/minecraft/kami/scripts/build-librelogin.sh [seçenekler]
@@ -266,6 +266,7 @@ Hiçbir şeyi değiştirmez. Her satır `[TAMAM]`, `[UYARI]` ya da `[KRİTİK]`:
 | Disk doluluğu | > %70 uyarı, > %90 kritik |
 | Yedek deposu yerel mi; son yedek ne zaman | Yerel: uyarı. Son yedek > 2 saat: uyarı, > 26 saat ya da hiç yok: kritik |
 | Her sunucunun `server.jar` / `pico_limbo` dosyası var mı | Yoksa kritik |
+| LibreLogin: `network.env` `LIBRELOGIN_COMMIT` ↔ `plugins.list` `LibreLogin-<ilk7>.jar` ↔ `/opt/minecraft/artifacts` | Uyuşmazlık kritik; jar henüz derlenmediyse uyarı (`sudo mc build-librelogin`) |
 
 Root olmadan çalıştırılırsa erişemediği denetimleri atlar. Kritik bulgu varsa sıfırdan farklı
 kodla çıkar.

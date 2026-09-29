@@ -8,9 +8,10 @@ proxies:
     # Velocity'deki online-mode ile AYNI olmalı (karma giriş → false). false iken Paper
     # addan offline UUID üretir; bu da LibreLogin'in CRACKED UUID'leriyle eşleşir.
     online-mode: false
-    # Sır dosyada TUTULMAZ: Paper PAPER_VELOCITY_SECRET ortam değişkenini okur
-    # (/etc/minecraft/secrets.env, systemd). Burada boş kalmalı.
-    secret: ''
+    # Sır burada verilmez: Paper PAPER_VELOCITY_SECRET ortam değişkenini okur
+    # (/etc/minecraft/secrets.env, systemd). Ortam değeri dosyadakinden her zaman önce gelir.
+    # Not: Paper açılışta bu değeri sunucudaki paper-global.yml'e de yazar (0640, minecraft);
+    # bu yüzden burada "secret" anahtarı YOK (olsaydı her "mc apply" boşaltıp değişiklik sayardı).
 chunk-system:
   # Parça (chunk) yükleme/üretme iş parçacıkları açıkça 2 (8 vCPU'da Paper'ın hesapladığı
   # değer de 2; VM'deki çekirdek algısına bağlı kalmasın). Dünya önceden üretilmemişse ve

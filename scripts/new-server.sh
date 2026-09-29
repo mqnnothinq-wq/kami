@@ -32,21 +32,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-heap_to_mib() {
-    local v=${1^^} n
-    [[ $v =~ ^([0-9]+)([KMG]?)$ ]] || return 1
-    n=${BASH_REMATCH[1]}
-    case ${BASH_REMATCH[2]} in
-        G) echo $((n * 1024)) ;;
-        M) echo "$n" ;;
-        K) echo $((n / 1024)) ;;
-        *) echo $((n / 1048576)) ;;
-    esac
-}
-
-fmt_mib() {
-    awk -v m="$1" 'BEGIN { if (m >= 1024) printf "%.1f GiB", m / 1024; else printf "%d MiB", m }'
-}
+# heap_to_mib / fmt_mib: lib.sh
 
 # server.env içindeki KEY=... satırını KEY="değer" yapar; yoksa sona ekler.
 set_env_var() { # <dosya> <anahtar> <değer>  (değerler önceden doğrulanmış olmalı)

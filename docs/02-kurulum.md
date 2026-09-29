@@ -103,8 +103,8 @@ Bundan sonraki tüm komutlar `yonetici` kullanıcısıyla, `sudo` ile çalışt�
 
 ## 4. Depoyu indirin
 
-Depo **`/opt/minecraft/kami`** konumunda olmalıdır (systemd birimleri ve zamanlayıcılar bu yolu
-bekler; `/root` ya da `/home` altına koymayın).
+Depo için **`/opt/minecraft/kami`** konumu önerilir (bu belgedeki komutlar bu yolu kullanır).
+`/root` ya da `/home` altına koymayın: servisler oradaki dosyaları okuyamaz.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git
@@ -339,7 +339,8 @@ Velocity günlüğünde şunları görmeniz **normaldir**:
 
 `mc doctor` her satıra `[TAMAM]`, `[UYARI]` ya da `[KRİTİK]` yazar: Java sürümü, RAM bütçesi,
 swap, CPU steal, `secrets.env` izinleri, UFW, portların yalnız 127.0.0.1'de dinlenmesi, disk,
-yedek deposunun yeri ve son yedeğin yaşı, sunucu dosyaları. **Kritik** satırları giderin. Uzak
+yedek deposunun yeri ve son yedeğin yaşı, sunucu dosyaları, LibreLogin jar'ının commit ile
+uyumu. **Kritik** satırları giderin. Uzak
 depo tanımlamadıysanız "Yedek deposu yerel" uyarısı görürsünüz; bu bilinçli bir uyarıdır. Henüz
 hiç yedek alınmadıysa yedek satırı da **kritik** çıkar ("restic snapshots çalışmadı" — uzak depo
 ilk yedekte oluşturulur — ya da "Hiç yedek yok"); `sudo mc backup all` başarıyla bittikten sonra
@@ -468,7 +469,8 @@ da standart dışı bir port kullanmanız gerekiyorsa:
 ## 16. Duman testi ve canlıya alma
 
 LibreLogin bir geliştirme sürümü olduğu için canlıya almadan önce aşağıdaki testlerin **hepsi**
-geçmelidir. Aynı testi Velocity, Floodgate ya da LibreLogin her güncellendiğinde tekrarlayın.
+geçmelidir. Aynı testi Velocity, Geyser, Floodgate, Sonar ya da LibreLogin her güncellendiğinde
+tekrarlayın (hepsi giriş yolundadır).
 Ayrıntılar: [docs/08](08-giris-sistemi.md#duman-testi-canlıya-alma-kapısı). Java testlerinde her
 yeni ad + IP çifti (premium dahil) ilk bağlantıda Sonar'ın "tekrar bağlan" mesajıyla bir kez
 atılır; bu bir başarısızlık değildir, tekrar bağlanın.

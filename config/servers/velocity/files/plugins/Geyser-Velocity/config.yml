@@ -1,6 +1,9 @@
 # Geyser (Velocity) — config.yml ÜZERİNE YAZILACAK anahtarlar (tam dosya değil).
 # Geyser dosyayı ilk açılışta plugins/Geyser-Velocity/ altında üretir; "mc apply" ondan sonra
-# bunları birleştirir. Bedrock portu varsayılan 19132/UDP (network.env PUBLIC_BEDROCK_PORT) kalır.
+# bunları birleştirir.
+# Bedrock portu network.env PUBLIC_BEDROCK_PORT'tan gelir (UFW ve mc doctor da aynı değeri kullanır).
+bedrock:
+  port: @@PUBLIC_BEDROCK_PORT@@
 java:
   # Bedrock oyuncuları Floodgate ile doğrulanır (Java hesabı gerekmez). Floodgate kuruluyken
   # Geyser bunu kendisi de seçer; açıkça yazıldı.

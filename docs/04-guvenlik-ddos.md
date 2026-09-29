@@ -115,8 +115,11 @@ adresten geliyorsa önünüzde bir vekil vardır; DeHost'a PROXY protocol'ü sor
   imzayı doğrular; sırrı bilmeyen biri backend'e oyuncu kimliği uyduramaz.
 - **Sır nerede?** `/etc/minecraft/secrets.env` (root, 0600) içinde `VELOCITY_FORWARDING_SECRET`
   ve `PAPER_VELOCITY_SECRET` (aynı değer, 64 hane hex). systemd bunları ortam değişkeni olarak
-  verir; Velocity, Paper ve PicoLimbo ortamdan okur. Hiçbir config dosyasına yazılmaz,
-  `forwarding.secret` dosyası oluşturulmaz, git'e girmez.
+  verir; Velocity, Paper ve PicoLimbo ortamdan okur. Depodaki hiçbir dosyada yoktur, git'e
+  girmez ve `forwarding.secret` dosyası oluşturulmaz. Tek istisna: Paper açılışta ortamdaki
+  değeri sunucudaki `servers/<sunucu>/config/paper-global.yml` dosyasına da yazar (izin 0640,
+  sahibi `minecraft`; yedeklerde restic ile şifreli). Değiştirmek için yine yalnız
+  `secrets.env` yeterlidir: dolu ortam değeri dosyadakinin önüne geçer.
 - **Sırrı değiştirmek** (sızdığını düşünüyorsanız):
 
   ```bash

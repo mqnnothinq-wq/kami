@@ -155,8 +155,8 @@ içindeki **giriş duman testini** mutlaka yapın.
 ## Önemli uyarılar
 
 - **LibreLogin kendi derlediğiniz bir geliştirme sürümüdür.** Açılışta "DO NOT USE THIS IN
-  PRODUCTION" uyarısı basması beklenen durumdur. Canlıya almadan önce ve Velocity, Floodgate ya
-  da LibreLogin her güncellendiğinde [giriş duman testini](docs/08-giris-sistemi.md#duman-testi-canlıya-alma-kapısı)
+  PRODUCTION" uyarısı basması beklenen durumdur. Canlıya almadan önce ve Velocity, Geyser,
+  Floodgate, Sonar ya da LibreLogin her güncellendiğinde [giriş duman testini](docs/08-giris-sistemi.md#duman-testi-canlıya-alma-kapısı)
   yapın. Test geçmezse canlıya almayın.
 - **Satın almadan önce DeHost'a soruları sorun** ([docs/01](docs/01-donanim-ve-kapasite.md#satın-almadan-önce-dehosta-sorulacak-11-soru)):
   gerçek çekirdek mi, 9950X mi X3D mi, DDoS koruması şeffaf mı ters vekil mi, hangi şehir.
