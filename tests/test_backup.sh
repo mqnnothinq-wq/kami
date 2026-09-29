@@ -145,5 +145,46 @@ check "yeni günlük korundu" test -e "$SV/lobby/logs/yeni.log.gz"
 check "restic forget saklama politikası (network.env)" \
     rlog_has "forget --prune --host mc01 --group-by host,tags --keep-hourly 24 --keep-daily 7 --keep-weekly 4 --keep-monthly 6"
 
+echo "# mc restore (geçici dizin root'a ait MC_ROOT altında)"
+# Sahte restic: snapshots --json tek bir lobby snapshot'ı döndürür; restore hedefe dünyayı açar.
+cat >"$T/bin/restic" <<'EOF2'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FAKE/restic.log"
+case $1 in
+    snapshots)
+        if [[ " $* " == *" --json "* ]]; then
+            printf '[{"id":"abcdef1234567890","time":"2026-09-29T10:00:00Z","hostname":"mc01","tags":["lobby"],"paths":["%s"]}]\n' "$MC_ROOT/servers/lobby"
+        else
+            printf '[]\n'
+        fi ;;
+    restore)
+        target=""
+        while (($#)); do [[ $1 == --target ]] && target=$2; shift; done
+        printf '%s\n' "$target" >"$FAKE/restore-target"
+        mkdir -p "$target$MC_ROOT/servers/lobby/world"
+        printf 'geri-yuklenen\n' >"$target$MC_ROOT/servers/lobby/world/level.dat" ;;
+esac
+exit 0
+EOF2
+chmod 0755 "$T/bin/restic"
+mkdir -p "$SV/lobby/world" "$SV/lobby/libraries"
+printf 'eski\n' >"$SV/lobby/world/level.dat"
+printf 'kutuphane\n' >"$SV/lobby/libraries/lib.jar"
+: >"$FAKE/restic.log"
+RC=0
+OUT=$(bash "$REPO/scripts/backup.sh" restore lobby abcdef12 <<<"EVET" 2>&1) || RC=$?
+check "restore çıkış 0" eq "$RC" 0
+check "geri yüklenen dünya yerinde" grep -qx 'geri-yuklenen' "$SV/lobby/world/level.dat"
+check "eski dizin kenara alındı" compgen -G "$SV/lobby.onceki-*" >/dev/null
+check "paper kütüphaneleri eski dizinden taşındı (carry_over)" test -f "$SV/lobby/libraries/lib.jar"
+hedef=$(cat "$FAKE/restore-target")
+check "restic hedefi MC_ROOT altında, servers/ altında değil" test "${hedef%/.restore-lobby.*}" = "$MC_ROOT"
+check "geçici dizin silindi" test -z "$(compgen -G "$MC_ROOT/.restore-*" || true)"
+check "servers/ altında geçici dizin kalmadı" test -z "$(compgen -G "$SV/.restore-*" || true)"
+check "sunucu dizini 0750" eq "$(stat -c %a "$SV/lobby")" 750
+RC=0
+OUT=$(bash "$REPO/scripts/backup.sh" restore lobby abcdef12 <<<"hayir" 2>&1) || RC=$?
+check "onay verilmezse iptal" out_has "İptal edildi"
+
 printf '\ntest_backup: %d geçti, %d başarısız\n' "$PASS" "$FAIL"
 ((FAIL == 0))
