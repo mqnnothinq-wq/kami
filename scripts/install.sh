@@ -198,11 +198,26 @@ preflight() {
 
 # --- Paketler ---------------------------------------------------------------
 APT_ENV=(env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l)
-APT_OPTS=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+# DPkg::Lock::Timeout: yeni VDS'te otomatik güncelleme (unattended-upgrades) apt'yi kilitliyorsa
+# hemen hata vermek yerine 10 dakikaya kadar bekle.
+APT_OPTS=(-y -q -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+
+# apt-get update liste kilidini ayrıca alır; kilitliyse birkaç kez yeniden dener.
+apt_update() {
+    local i
+    for i in {1..20}; do
+        if run "${APT_ENV[@]}" apt-get update -q -o DPkg::Lock::Timeout=600; then
+            return 0
+        fi
+        log_warn "apt-get update başarısız (büyük olasılıkla otomatik güncelleme apt'yi kilitledi); 15 sn sonra yeniden ($i/20)."
+        sleep 15
+    done
+    die "apt-get update 20 denemede başarısız. Birkaç dakika bekleyip install.sh'yi yeniden çalıştırın (kaldığı yerden devam eder)."
+}
 
 install_packages() {
     step "Paketler"
-    run "${APT_ENV[@]}" apt-get update -q
+    apt_update
     run "${APT_ENV[@]}" apt-get install "${APT_OPTS[@]}" "${APT_PACKAGES[@]}"
     # sysstat geçmişi (sar): steal/CPU sorunlarını sonradan incelemek için
     if [[ -f /etc/default/sysstat ]] && grep -q '^ENABLED="false"' /etc/default/sysstat; then
@@ -254,7 +269,7 @@ Components: main
 Signed-By: $ADOPTIUM_KEYRING
 EOF
     if ((FILE_CHANGED)) || [[ ! -f /var/lib/apt/lists/packages.adoptium.net_artifactory_deb_dists_${OS_CODENAME}_InRelease ]]; then
-        run "${APT_ENV[@]}" apt-get update -q
+        apt_update
     fi
 }
 
@@ -322,8 +337,10 @@ install_yq() {
         rm -f -- "$tmp"
         log_ok "yq kuruldu: /usr/local/bin/yq"
     fi
-    if [[ $(command -v yq 2>/dev/null) != /usr/local/bin/yq ]]; then
-        log_warn "PATH'te önce başka bir yq var ($(command -v yq 2>/dev/null)); betikler YQ=/usr/local/bin/yq ile çalıştırılmalı."
+    local cur
+    cur=$(command -v yq 2>/dev/null || true)
+    if [[ -n $cur && $cur != /usr/local/bin/yq ]]; then
+        log_warn "PATH'te önce başka bir yq var ($cur); betikler YQ=/usr/local/bin/yq ile çalıştırılmalı."
     fi
 }
 
@@ -465,7 +482,7 @@ setup_fail2ban() {
     install_file "$REPO_DIR/host/fail2ban-jail.local" "$F2B_CONF"
     if [[ -f /etc/fail2ban/jail.local ]] && grep -q '^# Kurulum yeri: /etc/fail2ban/jail.local' /etc/fail2ban/jail.local; then
         log_warn "/etc/fail2ban/jail.local önceki bir kami kurulumundan kalmış; ayarlar artık $F2B_CONF içinde."
-        log_warn "  Kendi değişikliğiniz yoksa silin: rm /etc/fail2ban/jail.local && systemctl restart fail2ban"
+        log_warn "  Kendi değişikliğiniz yoksa silin: sudo rm /etc/fail2ban/jail.local && sudo systemctl restart fail2ban"
     fi
     sysd enable --now fail2ban
     if ((FILE_CHANGED)); then sysd restart fail2ban; fi
@@ -702,7 +719,7 @@ ${_C_GRN}Kurulum tamam.${_C_OFF} Sonraki adımlar (sırayla):
 Yedek: saatlik yedek ve günlük budama zamanlayıcıları etkin.
   - $BACKUP_ENV_FILE içinde UZAK bir restic deposu tanımlayın (varsayılan yerel depo makine kaybına karşı korumaz).
   - $MC_ETC/restic.pass dosyasını makine DIŞINDA saklayın: parola kaybı = yedek kaybı.
-Günlük 05:00 yeniden başlatma etkin; kapatmak için: systemctl disable --now mc-daily-restart.timer
+Günlük 05:00 yeniden başlatma etkin; kapatmak için: sudo systemctl disable --now mc-daily-restart.timer
 EOF
     ((HARDEN_SSH)) || printf '%s\n' "SSH parola girişini kapatmak için (anahtarınız varsa): sudo $SCRIPTS_DIR/install.sh --harden-ssh" >&2
 }

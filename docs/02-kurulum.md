@@ -149,6 +149,11 @@ sudo bash /opt/minecraft/kami/scripts/install.sh --dry-run
 sudo bash /opt/minecraft/kami/scripts/install.sh
 ```
 
+Yeni açılmış bir VDS'te Ubuntu ilk saatlerde otomatik güncelleme yapar ve apt'yi kilitler.
+install.sh bu kilidi 10 dakikaya kadar bekler ve `apt-get update`'i birkaç kez yeniden dener.
+Yine de "Could not get lock" hatasıyla durursa birkaç dakika bekleyip aynı komutu tekrar
+çalıştırın; betik kaldığı yerden güvenle devam eder.
+
 **Seçenekler:**
 
 | Seçenek | Anlamı |
@@ -431,7 +436,12 @@ sudo mc rcon survival "chunky continue"
 - Chunky bir onay isterse `sudo mc rcon survival "chunky confirm"`.
 - Süre ve boyut tahmini (DOĞRULANMADI): 10000 × 10000 alan ≈ 390 bin parça, saniyede 200–800
   parçayla ~10–35 dakika, diskte ~2–6 GB. Önce `chunky radius 1000` ile deneyip ölçekleyebilirsiniz.
-  Sürerken `mc log survival` ile izleyin; bu sırada CPU steal ölçümü de yapabilirsiniz.
+  Sürerken `sudo mc log survival` ile izleyin; bu sırada CPU steal ölçümü de yapabilirsiniz.
+- **05:00 yeniden başlatması ön-üretimi durdurur** ve Chunky yeniden açılışta kendiliğinden
+  devam etmeyebilir. Ön-üretimi geceye bıraktıysanız sabah `sudo mc rcon survival "chunky progress"`
+  ile bakın, gerekirse `sudo mc rcon survival "chunky continue"`. Uzun bir ön-üretim boyunca
+  günlük yeniden başlatmayı geçici olarak durdurabilirsiniz:
+  `sudo systemctl stop mc-daily-restart.timer`, bitince `sudo systemctl start mc-daily-restart.timer`.
 - **26.x dünya düzeni:** 26.1'den beri tüm boyutlar tek bir `world/` klasöründedir
   (`world/dimensions/minecraft/overworld`, `…/the_nether`, `…/the_end`); `world_nether` ve
   `world_the_end` klasörleri yoktur. Overworld'ün adı `world`'dür. **Nether ve End'in Chunky'deki
@@ -508,7 +518,7 @@ alındı"`; git kimliği 4. adımda tanımlandı) ve sunucuyu duyurun.
 | Oyuncu "Unable to verify player details" ile atılıyor | **İletim sırrı uyuşmuyor** (Velocity ve Paper farklı sır kullanıyor) | İki değişkeni aynı değere getirin, `sudo mc restart all`. Limbo da aynı `VELOCITY_FORWARDING_SECRET`'i kullanır |
 | Oyuncu "This server requires you to connect with Velocity." ile atılıyor | Paper iletim bekliyor ama gelmedi: biri backend'e proxy'yi atlayarak doğrudan bağlanıyor ya da Velocity'de `player-info-forwarding-mode` `MODERN` değil | Backend'ler yalnız 127.0.0.1'de dinlemeli (`sudo mc doctor` port satırları); `velocity.toml`'u depodan yeniden uygulayın (`sudo mc apply velocity`, `sudo mc restart velocity`) |
 | **Hiç kimse** bağlanamıyor, istemci hemen kopuyor/zaman aşımı; Velocity günlüğünde HAProxy/çözümleme hataları | `haproxy-protocol` değeri koruma türüyle uyuşmuyor | [docs/04](04-guvenlik-ddos.md#ddos-koruması-şeffaf-mı-ters-vekil-mi): şeffaf korumada `false`, PROXY başlığı gönderen ters vekilde `true` |
-| Bedrock oyuncuları bağlanamıyor, Java çalışıyor | UDP 19132 kapalı ya da sağlayıcı süzüyor; Geyser açılmadı | `sudo ufw status` (19132/udp ALLOW olmalı); `sudo ss -lunp \| grep 19132`; `mc log velocity`'de Geyser açılış satırları. DeHost'a UDP 19132'nin süzülüp süzülmediğini sorun |
+| Bedrock oyuncuları bağlanamıyor, Java çalışıyor | UDP 19132 kapalı ya da sağlayıcı süzüyor; Geyser açılmadı | `sudo ufw status` (19132/udp ALLOW olmalı); `sudo ss -lunp \| grep 19132`; `sudo mc log velocity`'de Geyser açılış satırları. DeHost'a UDP 19132'nin süzülüp süzülmediğini sorun |
 | Günlükte "DO NOT USE THIS IN PRODUCTION" | LibreLogin geliştirme sürümü | Beklenen durum; duman testini yapın |
 | `mc init` "EULA'sını kabul etmelisiniz" diyor | `--accept-eula` verilmedi | EULA'yı okuyun: `sudo mc init all --accept-eula` |
 | "Giriş sunucusu şu an kapalı" (kick-no-limbo) | limbo çalışmıyor | `sudo mc start limbo`; `sudo mc log limbo` |

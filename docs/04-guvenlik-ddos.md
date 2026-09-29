@@ -9,7 +9,7 @@ değildir).
 | Tehdit | Olasılık | Önlem (bu depoda) | Sizin işiniz |
 |---|---|---|---|
 | DDoS (TCP 25565 / UDP 19132 seli) | Yüksek (TR sunucularında yaygın) | Sağlayıcının DDoS koruması; Velocity `login-ratelimit`, paket sınırlayıcı; çekirdek SYN cookies | Koruma türünü DeHost'a sorun, `haproxy-protocol`'ü ona göre ayarlayın |
-| Bot saldırısı (sahte oyuncu seli) | Yüksek | Sonar (her yeni oyuncu doğrulanır), Velocity giriş hız sınırı, Paper `max-joins-per-tick` | Saldırı sırasında `mc log velocity` izleyin |
+| Bot saldırısı (sahte oyuncu seli) | Yüksek | Sonar (her yeni oyuncu doğrulanır), Velocity giriş hız sınırı, Paper `max-joins-per-tick` | Saldırı sırasında `sudo mc log velocity` izleyin |
 | Girişi atlatma (backend'e ya da limbo'ya doğrudan bağlanma) | Orta | Backend'ler ve limbo yalnız 127.0.0.1'de; modern forwarding HMAC sırrı; UFW | `mc doctor` port satırları hep `[TAMAM]` olmalı |
 | Hesap çalma (cracked adlar) | Orta | LibreLogin: BCrypt, 5 yanlış denemede atma, yasaklı şifre listesi, premium adların ayrılması | Yetkili hesapları premium olsun ([docs/08](08-giris-sistemi.md)) |
 | Arka kapılı eklenti (sızdırılmış/"crack" ücretli eklentiler) | Orta | Yalnız resmî kaynaklar, özet (hash) doğrulama; sunucular yetkisiz `minecraft` kullanıcısıyla, sertleştirilmiş systemd biriminde | Asla sızdırılmış eklenti kurmayın |

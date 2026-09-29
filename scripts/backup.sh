@@ -461,8 +461,11 @@ cmd_restore() {
     IFS= read -r answer || answer=""
     [[ $answer == EVET ]] || die "İptal edildi (onay verilmedi)."
 
-    # Önce geçici dizine aç (aynı dosya sistemi): başarısız olursa canlı dizine dokunulmamış olur.
-    stage=$(mktemp -d "$SERVERS_DIR/.restore-$srv.XXXXXX") || die "Geçici dizin oluşturulamadı."
+    # Önce geçici dizine aç: başarısız olursa canlı dizine dokunulmamış olur. Geçici dizin root'a
+    # ait $MC_ROOT altında (minecraft'ın yazabildiği servers/ altında DEĞİL): çalışan diğer sunucular
+    # aynı kullanıcıyla çalıştığından, oradaki bir dizin root işlem yaparken sembolik bağla
+    # değiştirilebilirdi. Aynı dosya sistemi → son adımdaki mv anlık bir yeniden adlandırmadır.
+    stage=$(mktemp -d "$MC_ROOT/.restore-$srv.XXXXXX") || die "Geçici dizin oluşturulamadı."
     log_info "Snapshot açılıyor..."
     if ! "$RESTIC" restore "$id" --target "$stage"; then
         rm -rf -- "$stage"
@@ -474,18 +477,20 @@ cmd_restore() {
         log_info "mc@$srv durduruluyor..."
         systemctl stop "$(unit_of "$srv")" || { rm -rf -- "$stage"; die "Sunucu durdurulamadı."; }
     fi
-    if [[ -e $dir ]]; then
+    if [[ -e $dir || -L $dir ]]; then
         aside="$dir.onceki-$(date +%Y%m%d-%H%M%S)"
         mv -- "$dir" "$aside" || { rm -rf -- "$stage"; die "Mevcut dizin kenara alınamadı."; }
         log_info "Mevcut dizin saklandı: $aside"
     fi
+    # Yeni dizini root'a ait geçici alandayken hazırla (kopyala, sahiplik, izin), sonra tek
+    # hamlede yerine koy: hiçbir root işlemi minecraft'ın değiştirebileceği bir yolda yapılmaz.
+    carry_over "$type" "${aside:-}" "$stage$src"
+    if [[ ${EUID:-$(id -u)} -eq 0 ]] && id -u "$MC_USER" >/dev/null 2>&1; then
+        chown -R -- "$MC_USER:" "$stage$src" # "kullanıcı:" = birincil grup; -R sembolik bağ izlemez
+    fi
+    chmod 0750 -- "$stage$src"
     mv -T -- "$stage$src" "$dir" || die "Geri yüklenen dizin yerine taşınamadı (eski dizin: ${aside:-yok}; açılan: $stage$src)."
     rm -rf -- "$stage"
-    carry_over "$type" "${aside:-}" "$dir"
-    if [[ ${EUID:-$(id -u)} -eq 0 ]] && id -u "$MC_USER" >/dev/null 2>&1; then
-        chown -R -- "$MC_USER:" "$dir" # "kullanıcı:" = kullanıcının birincil grubu
-    fi
-    chmod 0750 -- "$dir"
     if [[ $type == velocity ]]; then promote_librelogin_db "$dir"; fi
 
     log_ok "$srv geri yüklendi (snapshot ${id:0:8}, $time)."

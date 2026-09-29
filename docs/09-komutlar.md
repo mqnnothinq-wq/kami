@@ -20,7 +20,7 @@ komutların çoğu root ister (sunucu dosyaları, gizli değerler, systemd).
 | `mc stop [sunucu\|all]` | Durdurur (`all`: önce velocity, sonra diğerleri) |
 | `mc restart [sunucu\|all]` | Durdurup başlatır |
 | `mc status [sunucu\|all]` | Durum tablosu: tür, port, durum, bellek (RSS), heap |
-| `mc log <sunucu> [journalctl seçenekleri]` | Canlı günlük (Ctrl+C ile çıkılır). `mc logs` da olur |
+| `sudo mc log <sunucu> [journalctl seçenekleri]` | Canlı günlük (Ctrl+C ile çıkılır). `mc logs` da olur. Yönetici hesabı `adm` grubunda değilse `sudo` olmadan boş görünür |
 | `mc cmd <sunucu> <komut...>` | Sunucu konsoluna komut yazar (Velocity dahil); yanıt günlükte |
 | `mc rcon <sunucu> <komut...>` | RCON ile çalıştırır ve yanıtı basar (yalnız Paper) |
 | `mc say <mesaj...>` | Çalışan tüm Paper sunucularına duyuru |
