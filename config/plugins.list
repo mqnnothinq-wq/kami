@@ -35,6 +35,9 @@ backends           LuckPerms     luckperms   bukkit
 backends           ViaVersion    hangar      ViaVersion
 # Dünya ön-üretimi (pregen) ve sınır; yalnız ana sunucu. Kullanımı: survival/init-commands.txt
 survival           Chunky        modrinth    chunky
+# Animasyonlu modeller ve emote'lar (MIT, ücretsiz): paket/bettermodel/ altındaki .bbmodel dosyaları
+# plugins/BetterModel/models ve plugins/BetterModel/players klasörlerine konur (paket/README.md).
+backends           BetterModel   hangar      BetterModel
 
 # --- İsteğe bağlı örnekler (etkinleştirmek için baştaki '#' işaretini kaldırın) ------------------
 # Eski istemciler (1.21.x vb.) için ViaVersion eki:

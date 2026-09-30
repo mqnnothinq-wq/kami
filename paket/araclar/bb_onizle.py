@@ -214,7 +214,9 @@ def ciz(model, anim, t, G, olcek, merkez, yaw, pitch):
             if yuz.get("texture") is None:
                 continue
             k = [MV @ np.array([*p, 1.0]) for p in KOSE[yon](a, b)]
-            n = np.cross((k[1] - k[0])[:3], (k[3] - k[0])[:3])
+            # Köşe sırası (sol-üst, sağ-üst, sağ-alt, sol-alt) dışarıdan bakınca saat yönünde:
+            # dış normal = (sol-alt − sol-üst) × (sağ-üst − sol-üst).
+            n = np.cross((k[3] - k[0])[:3], (k[1] - k[0])[:3])
             if np.linalg.norm(n) < 1e-9:
                 continue
             n = n / np.linalg.norm(n)
@@ -250,8 +252,8 @@ def ciz(model, anim, t, G, olcek, merkez, yaw, pitch):
             gor = ic & (tex[..., 3] > 0.1) & (z > zbuf[y0:y1, x0:x1])
             if not gor.any():
                 continue
-            dunya_n = (M[:3, :3] @ np.cross((np.array(KOSE[yon](a, b)[1]) - KOSE[yon](a, b)[0]),
-                                             (np.array(KOSE[yon](a, b)[3]) - KOSE[yon](a, b)[0])))
+            kk = [np.array(c, float) for c in KOSE[yon](a, b)]
+            dunya_n = M[:3, :3] @ np.cross(kk[3] - kk[0], kk[1] - kk[0])
             dn = dunya_n / (np.linalg.norm(dunya_n) or 1)
             isik = 1.0 if parlak else 0.5 + 0.5 * max(0.0, float(dn @ ISIK))
             bol = renk[y0:y1, x0:x1]

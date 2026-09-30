@@ -28,6 +28,31 @@ assert all(t["source"].startswith("data:image/png;base64,") for t in m["textures
 assert len(m["elements"]) == len(m["outliner"])
 ' "$ROOT/paket/modeller/kor_kilic.bbmodel"
 
+printf '== 2b. BetterModel modelleri\n'
+check "bbmodel dosyaları doğrulanır (bb_denetle)" python3 "$ROOT/paket/araclar/bb_denetle.py"
+check "BetterModel'in kendi steve kalıbı da doğrulayıcıdan geçer" python3 "$ROOT/paket/araclar/bb_denetle.py" "$ROOT/paket/bettermodel/sablon/steve.bbmodel"
+python3 "$ROOT/paket/araclar/bettermodel.py" --cikti "$tmp/bm" >/dev/null
+check "kor_kristali.bbmodel üreticiyle aynı" cmp "$tmp/bm/models/kor_kristali.bbmodel" "$ROOT/paket/bettermodel/models/kor_kristali.bbmodel"
+check "kami_emote.bbmodel üreticiyle aynı" cmp "$tmp/bm/players/kami_emote.bbmodel" "$ROOT/paket/bettermodel/players/kami_emote.bbmodel"
+check "emote'lar: selam, zafer, dans" python3 -c '
+import json, sys
+m = json.load(open(sys.argv[1], encoding="utf-8"))
+assert sorted(a["name"] for a in m["animations"]) == ["dans", "selam", "zafer"]
+' "$ROOT/paket/bettermodel/players/kami_emote.bbmodel"
+check "kristal 'idle' döngüsü var (BetterModel kendiliğinden oynatır)" python3 -c '
+import json, sys
+m = json.load(open(sys.argv[1], encoding="utf-8"))
+assert any(a["name"] == "idle" and a["loop"] == "loop" for a in m["animations"])
+assert any(g["name"].startswith("glow_") for g in m["groups"])
+' "$ROOT/paket/bettermodel/models/kor_kristali.bbmodel"
+python3 - "$ROOT/paket/bettermodel/models/kor_kristali.bbmodel" "$tmp/bozuk.bbmodel" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1], encoding="utf-8"))
+m["animations"][0]["loop"] = "sonsuz"
+json.dump(m, open(sys.argv[2], "w"))
+PY
+if python3 "$ROOT/paket/araclar/bb_denetle.py" "$tmp/bozuk.bbmodel" >/dev/null 2>&1; then nok "bozuk bbmodel reddedilir"; else ok "bozuk bbmodel reddedilir"; fi
+
 printf '== 3. zip\n'
 cp -r "$ROOT/paket" "$tmp/p1" && rm -rf "$tmp/p1/dist"
 python3 "$tmp/p1/araclar/paketle.py" >"$tmp/z1.txt"

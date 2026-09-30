@@ -27,6 +27,8 @@ paketi girişte otomatik indirir; mod kurmaları gerekmez.
 | `araclar/kor_kilic.py` | Kor Kılıç'ın dokularını, modelini ve `.bbmodel` dosyasını üretir (yalnız Python) |
 | `araclar/paketle.py` | Paketi doğrular ve `dist/kami-paket.zip` üretir; SHA-1'i yazar |
 | `araclar/onizle.py` | Önizleme PNG/GIF'i çizer (Pillow + numpy ister; yalnız geliştirme aracı) |
+| `bettermodel/` | BetterModel modelleri (`models/`, `players/`) ve steve kalıbı (`sablon/`) |
+| `araclar/bettermodel.py`, `bb_denetle.py`, `bb_onizle.py` | BetterModel modellerini üretir / doğrular / önizler |
 | `onizleme/` | Önizleme görselleri |
 | `dist/` | Derleme çıktısı (git'e girmez) |
 
@@ -79,6 +81,59 @@ kaynak/assets/kami/textures/item/<ad>.png   doku (animasyon için kareleri alt a
 
 Oyunda herhangi bir eşyaya `minecraft:item_model="kami:<ad>"` bileşeni verilince yeni görünümü alır.
 
+## Animasyonlu modeller ve emote'lar (BetterModel)
+
+[BetterModel](https://github.com/toxicity188/BetterModel) (MIT, ücretsiz; Minecraft 1.21.4–26.3,
+Java 25) Blockbench modellerini sunucu tarafında oynatır; paketini kendisi üretir. Oyuncuda mod gerekmez.
+
+![Kor Kristali](onizleme/kor_kristali.png)
+
+| Dosya | Ne | Animasyonlar |
+|---|---|---|
+| `bettermodel/models/kor_kristali.bbmodel` | Lobi süsü: obsidyen kaide + kor rünleri, dönüp süzülen parlayan kristal, ters yönde dönen 4 parça; dokusu 8 karelik akan ışıltı | `idle` (4 sn döngü, kendiliğinden oynar), `spawn` |
+| `bettermodel/players/kami_emote.bbmodel` | Oyuncu emote'ları (oyuncunun kendi skin'iyle) | `selam`, `zafer`, `dans` (döngü) |
+
+Önizlemeler: [kristal](onizleme/kor_kristali.gif) · [selam](onizleme/emote_selam.gif) ·
+[zafer](onizleme/emote_zafer.gif) · [dans](onizleme/emote_dans.gif) ·
+[kareler](onizleme/emote_onizleme.png). (Önizlemedeki oyuncu skin'i yalnız çizim içindir.)
+
+**Sunucuya koyma** (BetterModel `config/plugins.list` ile backend'lere kurulur):
+
+```bash
+# lobby için (survival'a da aynı şekilde)
+sudo -u minecraft mkdir -p /opt/minecraft/servers/lobby/plugins/BetterModel/{models,players}
+sudo -u minecraft cp /opt/minecraft/kami/paket/bettermodel/models/*.bbmodel  /opt/minecraft/servers/lobby/plugins/BetterModel/models/
+sudo -u minecraft cp /opt/minecraft/kami/paket/bettermodel/players/*.bbmodel /opt/minecraft/servers/lobby/plugins/BetterModel/players/
+sudo mc cmd lobby "bettermodel reload"
+```
+
+**Oyunda deneme:**
+
+```
+/bettermodel spawn kor_kristali          # kristali bir varlığa takıp çağırır (idle kendiliğinden oynar)
+/bettermodel test kor_kristali spawn     # belirli bir animasyonu dener
+/bettermodel play kami_emote selam       # emote: selam | zafer | dans
+```
+
+**Kaynak paketi:** BetterModel kendi paketini `plugins/BetterModel/build.zip` olarak üretir. Oyuncuların
+bu paketi de alması gerekir. Paket barındırma yöntemi seçilince bizim paketle birleştirilip tek adresten
+verilecek (CraftEngine kullanılırsa BetterModel paketini kendisi birleştirir). O zamana kadar denemek için
+`build.zip`'i istemcinin `resourcepacks` klasörüne kopyalayın.
+
+**Kalıcı yerleşim:** Kristali lobide sabit durdurmak için BetterModel'in NPC entegrasyonları (FancyNpcs,
+Citizens) ya da MythicMobs kullanılır; model adı `kor_kristali`.
+
+**Kaynak ve yeniden üretme:** `araclar/bettermodel.py` (yalnız Python) iki dosyayı üretir,
+`araclar/bb_denetle.py` doğrular, `araclar/bb_onizle.py` önizlemeleri çizer (Pillow + numpy).
+Emote dosyası BetterModel'in `steve.bbmodel` kalıbı üzerine kuruludur
+(`bettermodel/sablon/`, MIT lisansı: `bettermodel/sablon/LICENSE-BetterModel.md`).
+Dosyalar Blockbench'te (Generic Model) açılıp düzenlenebilir; elle düzenlemeye başladıysanız üreticiyi o
+dosya için kullanmayı bırakın (üretici üzerine yazar) ve `tests/test_paket.sh`'teki "üreticiyle aynı"
+kontrolünü kaldırın.
+
+**Bedrock:** Bedrock oyuncuları BetterModel modellerini varsayılan olarak görmez; bunun için
+GeyserModelEngine + GeyserUtils gerekir (26.2 uyumluluğu henüz doğrulanmadı).
+
 ## Işıltı ve animasyon teknikleri
 
 | Etki | Nasıl | Not |
@@ -86,7 +141,8 @@ Oyunda herhangi bir eşyaya `minecraft:item_model="kami:<ad>"` bileşeni verilin
 | Akan / yanıp sönen doku | Kareleri alt alta dizip `.png.mcmeta` ile `frametime` + `interpolate` | Eşya, blok ve model dokularında çalışır |
 | Karanlıkta parlama | Model parçasına `"light_emission": 0-15` | Yalnız o parça parlar; çevreyi aydınlatmaz |
 | Büyü parıltısı (mor) | Eşyaya `minecraft:enchantment_glint_override=true` | Rengi değiştirilemez (shader gerekir) |
-| Hareketli 3B model (dönen, süzülen, saldıran) | Blockbench animasyonu + eklenti (ör. BetterModel) | Eşya modelleri tek başına kemik animasyonu yapamaz |
+| Hareketli 3B model (dönen, süzülen, saldıran) | Blockbench animasyonu + BetterModel (yukarıda) | Eşya modelleri tek başına kemik animasyonu yapamaz |
+| Parlayan model parçası (BetterModel) | Grup ya da küp adını `glow_` ile başlatın | Kor Kristali böyle parlar |
 
 ## Sürüm uyumluluğu
 
